@@ -64,3 +64,21 @@ def test_barrier_smell():
     barrier = task("syn", type="synthesize", deps=[f"r{i}" for i in range(5)], prompt="merge")
     issues = graph.validate(g(readers + [barrier]))
     assert "barrier" in codes(issues, "warn")
+
+
+def test_validate_malformed_task_no_crash():
+    """A raw dict without id/type/schema must return errors but never raise."""
+    raw_task = {"prompt": "x"}
+    gr = {
+        "version": 1,
+        "run_id": "r",
+        "goal": "g",
+        "project": "/p",
+        "tasks": [raw_task],
+    }
+    gr["graph_hash"] = graph.compute_hash(gr)
+    issues = graph.validate(gr)
+    error_codes = codes(issues, "error")
+    assert "id" in error_codes
+    assert "type" in error_codes
+    assert "schema-summary" in error_codes

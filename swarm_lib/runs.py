@@ -32,7 +32,8 @@ def scan_results(run_dir, graph_hash=None):
         return completed, bad
     for p in sorted(d.glob("*.json")):
         r = paths.read_json(p)
-        if not r or r.get("version") != RESULT_VERSION:
+        if (not isinstance(r, dict) or r.get("version") != RESULT_VERSION
+                or not r.get("task") or r.get("task") != p.stem):
             bad.append(p.name)
             continue
         if graph_hash and r.get("hash") != graph_hash:
@@ -59,6 +60,9 @@ def abandon(run_dir) -> None:
 
 def take_lock(run_dir, owner, stale_hours=LOCK_STALE_HOURS) -> bool:
     existing = paths.read_json(lock_path(run_dir))
+    if existing and existing.get("owner") == owner:
+        paths.write_json_atomic(lock_path(run_dir), {"owner": owner, "ts": time.time()})
+        return True
     if existing and time.time() - existing.get("ts", 0) < stale_hours * 3600:
         return False
     paths.write_json_atomic(lock_path(run_dir), {"owner": owner, "ts": time.time()})
@@ -82,7 +86,11 @@ def pending_runs(project) -> list:
         status = (read_state(d) or {}).get("status")
         if status in ("completed", "abandoned", "failed-partial"):
             continue
-        if (time.time() - d.stat().st_mtime) / 86400 > NAG_MAX_AGE_DAYS:
+        mtimes = [d.stat().st_mtime]
+        rdir = results_dir(d)
+        if rdir.is_dir():
+            mtimes.append(rdir.stat().st_mtime)
+        if (time.time() - max(mtimes)) / 86400 > NAG_MAX_AGE_DAYS:
             continue
         graph = paths.read_json(d / "graph.json") or {}
         completed, _ = scan_results(d, graph.get("graph_hash"))

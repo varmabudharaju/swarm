@@ -65,3 +65,62 @@ def test_pending_runs_ages_out(tmp_path):
     old = time.time() - 8 * 86400
     os.utime(rd, (old, old))
     assert runs.pending_runs(proj) == []
+
+
+def test_scan_results_json_array_is_bad(tmp_path):
+    rd = make_run(tmp_path, tasks=[task("a")])
+    rdir = runs.results_dir(rd)
+    rdir.mkdir(parents=True, exist_ok=True)
+    paths.write_json_atomic(rdir / "a.json", [{"version": 1, "task": "a"}])
+    completed, bad = runs.scan_results(rd)
+    assert "a.json" in bad
+    assert "a" not in completed
+
+
+def test_scan_results_missing_task_is_bad(tmp_path):
+    rd = make_run(tmp_path, tasks=[task("a")])
+    rdir = runs.results_dir(rd)
+    rdir.mkdir(parents=True, exist_ok=True)
+    paths.write_json_atomic(rdir / "a.json", {"version": 1, "hash": "h1", "status": "ok"})
+    completed, bad = runs.scan_results(rd)
+    assert "a.json" in bad
+    assert "a" not in completed
+
+
+def test_scan_results_task_mismatch_is_bad(tmp_path):
+    rd = make_run(tmp_path, tasks=[task("a"), task("b")])
+    write_result(rd, "a")
+    # Write b.json but claim task is "a"
+    rdir = runs.results_dir(rd)
+    paths.write_json_atomic(rdir / "b.json", {"version": 1, "task": "a", "hash": "h1",
+                                               "status": "ok", "output": {"summary": "s"},
+                                               "summary": "s", "ts": time.time()})
+    completed, bad = runs.scan_results(rd, "h1")
+    assert "b.json" in bad
+    # b.json claiming to be task "a" must NOT overwrite the real a.json entry
+    assert completed.get("a") is not None
+    assert "b" not in completed
+
+
+def test_take_lock_same_owner_refreshes(tmp_path):
+    rd = make_run(tmp_path)
+    assert runs.take_lock(rd, "s1") is True
+    assert runs.take_lock(rd, "s1") is True   # same owner re-takes fresh lock
+    assert runs.take_lock(rd, "s2") is False  # different owner blocked
+
+
+def test_pending_runs_uses_results_mtime(tmp_path):
+    import os
+    proj = str(tmp_path / "proj")
+    rd = make_run(tmp_path, "stale", tasks=[task("a")])
+    # Create results/ dir first (fresh mtime)
+    rdir = runs.results_dir(rd)
+    rdir.mkdir(parents=True, exist_ok=True)
+    # Then age the run dir itself (8 days old) — AFTER results/ exists so os.utime
+    # on rd doesn't get overwritten by mkdir touching the parent
+    old = time.time() - 8 * 86400
+    os.utime(rd, (old, old))
+    # results/ dir retains a fresh mtime - run should still appear in pending
+    assert rdir.stat().st_mtime > time.time() - 86400  # results/ is fresh
+    pend = runs.pending_runs(proj)
+    assert any(p["run_id"] == "stale" for p in pend)

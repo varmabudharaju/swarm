@@ -34,13 +34,15 @@ def validate(graph) -> list:
     idset = set(ids)
     for t in tasks:
         tid = t.get("id")
+        if not t.get("id"):
+            err("id", "task missing id")
         if t.get("type") not in TYPES:
             err("type", f"{tid}: unknown type {t.get('type')}")
         for d in t.get("deps", []):
             if d not in idset:
                 err("dangling", f"{tid}: dep {d} does not exist")
         if len(t.get("deps", [])) > FAN_IN_MAX:
-            err("fan-in", f"{tid}: fan-in {len(t['deps'])} > {FAN_IN_MAX}")
+            err("fan-in", f"{tid}: fan-in {len(t.get('deps', []))} > {FAN_IN_MAX}")
         summary = ((t.get("schema") or {}).get("properties") or {}).get("summary") or {}
         if summary.get("type") != "string" or summary.get("maxLength", 10**9) > SUMMARY_MAX:
             err("schema-summary",
@@ -49,12 +51,12 @@ def validate(graph) -> list:
             err("prompt", f"{tid}: empty prompt")
     if graph.get("graph_hash") and graph["graph_hash"] != compute_hash(graph):
         err("hash", "graph_hash does not match tasks")
-    if not any(i["code"] in ("dangling", "dup-id") for i in issues):
-        indeg = {t["id"]: len(t.get("deps", [])) for t in tasks}
-        children = {t["id"]: [] for t in tasks}
+    if not any(i["code"] in ("dangling", "dup-id", "id") for i in issues):
+        indeg = {t.get("id"): len(t.get("deps", [])) for t in tasks}
+        children = {t.get("id"): [] for t in tasks}
         for t in tasks:
             for d in t.get("deps", []):
-                children[d].append(t["id"])
+                children[d].append(t.get("id"))
         queue = [i for i, n in indeg.items() if n == 0]
         seen = 0
         while queue:
@@ -77,13 +79,13 @@ def validate(graph) -> list:
             warn("verify-ratio", f"{nver} verify tasks exceed 30% of graph")
         bytype = {}
         for t in tasks:
-            bytype.setdefault(t["type"], set()).add(t["id"])
+            bytype.setdefault(t.get("type"), set()).add(t.get("id"))
         for t in tasks:
             deps = set(t.get("deps", []))
             for ty, members in bytype.items():
-                if (ty != t["type"] and deps and deps >= members and len(members) > 3
+                if (ty != t.get("type") and deps and deps >= members and len(members) > 3
                         and len(t.get("prompt", "")) < 200):
-                    warn("barrier", f"{t['id']}: depends on all {len(members)} {ty} tasks "
+                    warn("barrier", f"{t.get('id')}: depends on all {len(members)} {ty} tasks "
                                     "with a thin prompt - likely a phase barrier")
     return issues
 
