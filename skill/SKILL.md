@@ -23,6 +23,7 @@ SubagentStop hook automatically - workers never manage their own persistence.
 - Every task schema includes `summary: {type: string, maxLength: 2000}` plus
   whatever typed fields the task needs. Implement-task schemas must also include
   branch, worktree_path, files_touched, commits.
+- Unattended implement swarms require an auto-accepting permission posture (acceptEdits or a Bash allowlist) - state this to the user BEFORE launching; otherwise the run stalls at the first permission prompt.
 
 ## Process
 
@@ -67,13 +68,13 @@ SubagentStop hook automatically - workers never manage their own persistence.
    `ls ~/.claude/swarm/runs/<project-slug>/`).
 2. `ARGS=$(swarm args <run-dir>/graph.json --resume)` - takes the resume lock;
    refuses if another session holds it fresh. Scans results/, verifies hashes,
-   rebuilds the completed map.
+   rebuilds the completed map. If refused, show the user the lock owner and age from the error message; only after their explicit confirmation delete resume.lock and retry.
 3. Orphan implement branches: for any implement task WITHOUT a result file but
    WITH a `swarm/<run>/<task>` branch, delete branch + worktree (partial work
    from a dead run) and tell the user what was discarded.
 4. **Ask the user** with precise numbers: done/pending/failed counts, discarded
    partials, estimated remaining cost. Only on approval invoke
-   `{name: "swarm-run", args: <ARGS>}`.
+   `{name: "swarm-run", args: <ARGS>}`. Re-check rate-limit headroom (step 2 of Process) before re-launching.
 5. Finish as above. If all tasks were already done (finalize case), skip the
    workflow and go straight to synthesis + `swarm finish --status completed`.
 

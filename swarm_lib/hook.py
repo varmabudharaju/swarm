@@ -1,6 +1,7 @@
 """swarm hooks: SubagentStop checkpoint writer + SessionStart resume nag. Fail-open."""
 import datetime
 import json
+import re
 import sys
 import time
 import traceback
@@ -18,6 +19,8 @@ def handle_subagent_stop(event):
     mk = marker.parse(fu or "")
     if not mk:
         return None  # not a swarm task agent
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", mk["task"]):
+        return None
     info = extract.extract_output(tp, event.get("last_assistant_message"))
     run_dir = Path(mk["run"])
     graph = paths.read_json(run_dir / "graph.json")

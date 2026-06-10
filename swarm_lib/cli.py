@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 from . import graph as graph_mod
@@ -15,9 +16,14 @@ def cmd_validate(a) -> int:
     if gr is None:
         print(f"cannot read graph: {a.graph}")
         return 1
+    if not isinstance(gr, dict):
+        print(f"cannot read graph: {a.graph}")
+        return 1
     if a.print_hash:
         print(graph_mod.compute_hash(gr))
         return 0
+    if not gr.get("graph_hash"):
+        print("warn[hash]: graph_hash not set - cmd: swarm validate --print-hash")
     issues = graph_mod.validate(gr)
     for i in issues:
         print(f"{i['level']}[{i['code']}]: {i['msg']}")
@@ -33,19 +39,30 @@ def cmd_args(a) -> int:
     if gr is None:
         print(f"cannot read graph: {gpath}", file=sys.stderr)
         return 1
+    if not isinstance(gr, dict):
+        print(f"cannot read graph: {gpath}", file=sys.stderr)
+        return 1
     errs = graph_mod.errors(graph_mod.validate(gr))
     if errs:
         for i in errs:
             print(f"error[{i['code']}]: {i['msg']}", file=sys.stderr)
         return 1
+    if not gr.get("graph_hash"):
+        print("error[hash]: graph_hash missing - run 'swarm validate --print-hash' and set it",
+              file=sys.stderr)
+        return 1
     rd = gpath.parent
     completed = {}
     if a.resume:
-        import time as _time
-        owner = os.environ.get("CLAUDE_SESSION_ID", f"cli-{os.getpid()}-{_time.time()}")
+        owner = (os.environ.get("CLAUDE_CODE_SESSION_ID")
+                 or os.environ.get("CLAUDE_SESSION_ID")
+                 or f"cli-{os.getpid()}-{time.time()}")
         if not runs.take_lock(rd, owner):
-            print("resume.lock held by another session (fresh) - refusing. "
-                  "Wait, or delete resume.lock if you are sure.", file=sys.stderr)
+            held = paths.read_json(runs.lock_path(rd)) or {}
+            age_min = (time.time() - held.get("ts", 0)) / 60
+            print(f"resume.lock held by {held.get('owner', '?')} ({age_min:.0f}m old) - refusing. "
+                  f"If that session is dead, confirm with the user then: rm '{runs.lock_path(rd)}'",
+                  file=sys.stderr)
             return 1
         found, bad = runs.scan_results(rd, gr.get("graph_hash"))
         for b in bad:
@@ -71,6 +88,9 @@ def cmd_args(a) -> int:
 
 def cmd_finish(a) -> int:
     rd = Path(a.run_dir).resolve()
+    if not (rd / "graph.json").exists():
+        print(f"no run at {rd}")
+        return 1
     runs.write_state(rd, a.status)
     runs.release_lock(rd)
     print(f"run-state written: {a.status}")
@@ -96,7 +116,11 @@ def cmd_status(a) -> int:
 
 
 def cmd_abandon(a) -> int:
-    runs.abandon(Path(a.run_dir).resolve())
+    rd = Path(a.run_dir).resolve()
+    if not (rd / "graph.json").exists():
+        print(f"no run at {rd}")
+        return 1
+    runs.abandon(rd)
     print("abandoned")
     return 0
 

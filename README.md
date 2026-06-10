@@ -37,6 +37,8 @@ Spec: `docs/superpowers/specs/2026-06-10-swarm-orchestrator-design.md`.
 Sibling project: [tend](/Users/varma/tend) - context hygiene; swarm reads its
 rate-limit tee for launch headroom.
 
+Worker activity is audited machine-wide by agent-pd (hash-chained per-session logs in ~/.claude/pd/audit/).
+
 ## Managed paths
 
 `swarm install` owns these locations and will overwrite/delete them on

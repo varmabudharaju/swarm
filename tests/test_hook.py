@@ -119,3 +119,18 @@ def test_main_fail_open(monkeypatch, capsys, swarm_home):
     monkeypatch.setattr("sys.stdin", io.StringIO("NOT JSON"))
     assert hook.main() == 0
     assert capsys.readouterr().out == ""
+
+
+# --- Item 6: hook id-charset re-check ---
+
+def test_evil_task_id_rejected_no_file_written(tmp_path):
+    """Marker with task='../evil' → no result file written, result is None."""
+    rd = make_run(tmp_path, tasks=[task("t1")])
+    # Manually build a marker with an evil task id
+    mk_text = f"SWARM-TASK run={rd} task=../evil hash=h1"
+    tp = agent_transcript(tmp_path, mk_text + "\ndo it", {"summary": "evil"})
+    result = hook.handle_subagent_stop(stop_event(tp))
+    assert result is None
+    # no result file written for the evil task
+    assert not (runs.results_dir(rd) / "..evil.json").exists()
+    assert not list(runs.results_dir(rd).glob("*.json")) if runs.results_dir(rd).exists() else True

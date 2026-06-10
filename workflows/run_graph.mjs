@@ -20,6 +20,10 @@ export function validateGraph(tasks, completed) {
   for (const t of tasks) {
     if (!/^[A-Za-z0-9_.-]+$/.test(t.id || '')) errors.push(`invalid task id ${JSON.stringify(t.id)}`)
   }
+  for (const t of tasks) {
+    const s = ((t.schema || {}).properties || {}).summary || {}
+    if (s.type !== 'string' || !(s.maxLength <= 2000)) errors.push(`${t.id}: schema must cap summary at 2000`)
+  }
   const indeg = new Map(tasks.map(t => [t.id, t.deps.length]))
   const children = new Map(tasks.map(t => [t.id, []]))
   for (const t of tasks) for (const d of t.deps) if (children.has(d)) children.get(d).push(t.id)

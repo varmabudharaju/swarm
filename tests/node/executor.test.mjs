@@ -5,7 +5,8 @@ import { runGraph, validateGraph, buildPrompt, RESERVE_TOKENS } from '../../work
 const T = (id, deps = [], extra = {}) => ({
   id, title: id, type: 'research', prompt: `do ${id}`, deps,
   agent_type: 'swarm-reader', packet_path: `/run/packets/${id}.md`,
-  schema: { type: 'object' }, max_retries: 1, ...extra,
+  schema: { type: 'object', properties: { summary: { type: 'string', maxLength: 2000 } } },
+  max_retries: 1, ...extra,
 })
 const ARGS = (tasks, completed = {}, extra = {}) => ({
   run_dir: '/run', graph_hash: 'H', results_dir: '/run/results',
@@ -170,4 +171,14 @@ test('agent opts pass through agentType and isolation', async () => {
   assert.equal(a.calls[0].opts.agentType, 'swarm-implementer')
   assert.equal(a.calls[0].opts.isolation, 'worktree')
   assert.equal(a.calls[0].opts.phase, 'implement')
+})
+
+test('schema missing summary cap is fatal', async () => {
+  const a = okAgent()
+  // task with schema: {} (no summary property) → fatal validation error
+  const badTask = { ...T('a'), schema: {} }
+  const out = await runGraph(ARGS([badTask]), a.fn, null, null)
+  assert.ok(out.fatal.length > 0)
+  assert.ok(out.fatal.some(e => e.includes('schema must cap summary at 2000')))
+  assert.equal(a.calls.length, 0)
 })
