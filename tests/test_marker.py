@@ -4,8 +4,16 @@ from swarm_lib import marker
 def test_roundtrip():
     line = marker.build("/Users/v/.claude/swarm/runs/-p/r1", "t1", "abc123")
     assert line == "SWARM-TASK run=/Users/v/.claude/swarm/runs/-p/r1 task=t1 hash=abc123"
-    parsed = marker.parse("preamble\n" + line + "\nrest of prompt")
+    parsed = marker.parse(line + "\nrest of prompt")
     assert parsed == {"run": "/Users/v/.claude/swarm/runs/-p/r1", "task": "t1", "hash": "abc123"}
+
+
+def test_quoted_marker_not_first_line_ignored():
+    line = marker.build("/r", "t1", "h1")
+    # Marker buried in explanation must not parse
+    assert marker.parse("explanation\n" + line) is None
+    # Leading blank lines are fine — first non-empty line is the marker
+    assert marker.parse("\n\n" + line) == {"run": "/r", "task": "t1", "hash": "h1"}
 
 
 def test_run_dir_with_spaces():

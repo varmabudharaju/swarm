@@ -9,7 +9,7 @@ def home() -> Path:
 
 
 def project_slug(project) -> str:
-    return str(Path(project).resolve()).replace("/", "-")
+    return str(Path(project).resolve()).replace("-", "__").replace("/", "-")
 
 
 def runs_dir(project) -> Path:

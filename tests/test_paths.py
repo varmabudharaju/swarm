@@ -7,6 +7,8 @@ def test_home_respects_env(swarm_home):
 
 def test_project_slug():
     assert paths.project_slug("/Users/varma/foo") == "-Users-varma-foo"
+    assert paths.project_slug("/a/b-c") == "-a-b__c"
+    assert paths.project_slug("/a/b-c") != paths.project_slug("/a/b/c")
 
 
 def test_run_dir_layout(swarm_home):
