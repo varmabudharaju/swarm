@@ -53,3 +53,35 @@ def test_string_content_user_message(tmp_path):
             {"type": "text", "text": "ok"}]}},
     ])
     assert "SWARM-TASK" in extract.extract_output(str(tp))["first_user"]
+
+
+def test_first_user_list_content(tmp_path):
+    """first_user returns the first user text block from a list-content transcript."""
+    tp = tmp_path / "agent.jsonl"
+    write_jsonl(tp, [
+        {"type": "system", "message": {"role": "system", "content": "sys prompt"}},
+        {"type": "user", "message": {"role": "user", "content": [
+            {"type": "text", "text": "SWARM-TASK run=/r task=t1 hash=h\ndo it"}]}},
+        {"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "text", "text": "working"}]}},
+    ])
+    result = extract.first_user(str(tp))
+    assert result == "SWARM-TASK run=/r task=t1 hash=h\ndo it"
+
+
+def test_first_user_string_content(tmp_path):
+    """first_user returns the first user text from a string-content transcript."""
+    tp = tmp_path / "agent.jsonl"
+    write_jsonl(tp, [
+        {"type": "user", "message": {"role": "user", "content": "SWARM-TASK run=/r task=t2 hash=h\ngo"}},
+        {"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "text", "text": "ok"}]}},
+    ])
+    result = extract.first_user(str(tp))
+    assert result == "SWARM-TASK run=/r task=t2 hash=h\ngo"
+
+
+def test_first_user_missing_file(tmp_path):
+    """first_user returns None for a missing file."""
+    result = extract.first_user(str(tmp_path / "nope.jsonl"))
+    assert result is None

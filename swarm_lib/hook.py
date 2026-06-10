@@ -14,15 +14,19 @@ def handle_subagent_stop(event):
         "agent_transcript_path")
     if not tp or not Path(tp).exists():
         return None
-    info = extract.extract_output(tp, event.get("last_assistant_message"))
-    mk = marker.parse(info.get("first_user") or "")
+    fu = extract.first_user(tp)
+    mk = marker.parse(fu or "")
     if not mk:
         return None  # not a swarm task agent
+    info = extract.extract_output(tp, event.get("last_assistant_message"))
     run_dir = Path(mk["run"])
-    if not (run_dir / "graph.json").exists():
+    graph = paths.read_json(run_dir / "graph.json")
+    if not isinstance(graph, dict):
+        return None
+    if mk["task"] not in {t.get("id") for t in graph.get("tasks", [])}:
         return None
     out = info["output"]
-    summary = out.get("summary", "") if isinstance(out, dict) else str(out)[:2000]
+    summary = str(out.get("summary", "") if isinstance(out, dict) else out)[:2000]
     result = {
         "version": runs.RESULT_VERSION,
         "task": mk["task"],

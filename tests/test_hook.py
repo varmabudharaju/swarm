@@ -60,6 +60,38 @@ def test_marker_pointing_at_missing_run_ignored(tmp_path):
     assert hook.handle_subagent_stop(stop_event(tp)) is None
 
 
+def test_task_not_in_graph_ignored(tmp_path):
+    """Marker task='zz' on a run whose graph only has task 't1' → no results file."""
+    rd = make_run(tmp_path, tasks=[task("t1")])
+    mk = marker.build(str(rd), "zz", "h1")
+    tp = agent_transcript(tmp_path, mk + "\ngo", {"summary": "result"})
+    assert hook.handle_subagent_stop(stop_event(tp)) is None
+    # no result file for "zz"
+    assert not (runs.results_dir(rd) / "zz.json").exists()
+
+
+def test_dict_output_long_summary_capped_at_2000(tmp_path):
+    """Dict output with 5000-char summary string → stored summary length 2000."""
+    rd = make_run(tmp_path, tasks=[task("t3")])
+    mk = marker.build(str(rd), "t3", "h1")
+    tp = agent_transcript(tmp_path, mk + "\ngo", {"summary": "y" * 5000})
+    hook.handle_subagent_stop(stop_event(tp))
+    r = paths.read_json(runs.results_dir(rd) / "t3.json")
+    assert r["structured"] is True
+    assert len(r["summary"]) == 2000
+
+
+def test_dict_output_with_dict_summary_coerced_to_string(tmp_path):
+    """Dict output with a dict summary value → stored summary is a string."""
+    rd = make_run(tmp_path, tasks=[task("t4")])
+    mk = marker.build(str(rd), "t4", "h1")
+    tp = agent_transcript(tmp_path, mk + "\ngo", {"summary": {"a": 1}})
+    hook.handle_subagent_stop(stop_event(tp))
+    r = paths.read_json(runs.results_dir(rd) / "t4.json")
+    assert r["structured"] is True
+    assert isinstance(r["summary"], str)
+
+
 def test_session_start_nags_interrupted(tmp_path, monkeypatch):
     rd = make_run(tmp_path, tasks=[task("a"), task("b")])
     proj = str(tmp_path / "proj")

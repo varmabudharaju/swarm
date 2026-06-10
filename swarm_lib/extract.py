@@ -2,6 +2,31 @@
 import json
 
 
+def first_user(transcript_path):
+    """Cheap scan: return the first user message's text without parsing the whole file."""
+    try:
+        with open(transcript_path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                msg = obj.get("message") or {}
+                if msg.get("role") != "user":
+                    continue
+                content = msg.get("content")
+                if isinstance(content, str):
+                    return content
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            return block.get("text")
+                return None
+    except OSError:
+        pass
+    return None
+
+
 def extract_output(transcript_path, last_assistant_message=None):
     """Returns {first_user, output, structured}. Prefers a StructuredOutput
     tool call's input; falls back to the last assistant text, then to the
