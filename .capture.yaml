@@ -1,0 +1,7 @@
+shots:
+  - kind: cli
+    command: swarm status ~/.claude/swarm/runs/-Users-varma-tend/2026-06-10-tend-review
+    name: swarm-status-midrun
+  - kind: cli
+    command: echo '{"hook_event_name":"SessionStart","source":"startup","cwd":"/Users/varma/tend"}' | python3 -m swarm_lib.hook
+    name: swarm-resume-nag

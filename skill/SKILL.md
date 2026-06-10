@@ -14,6 +14,8 @@ SubagentStop hook automatically - workers never manage their own persistence.
 
 ## Hard rules
 
+- Custom agent types (swarm-reader/verifier/implementer) resolve only in sessions started AFTER `swarm install`. If agentType resolution fails mid-session, re-author the graph with `agent_type: null` (workers then run as default subagents driven by their prompts/packets) or restart the session.
+
 - NEVER invoke the swarm-run workflow with a graph that failed `swarm validate`.
 - NEVER resume without `swarm args --resume` (it takes the resume lock).
 - Implement tasks ALWAYS get `isolation: "worktree"` + the swarm-implementer
