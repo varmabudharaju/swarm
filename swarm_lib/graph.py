@@ -1,6 +1,7 @@
 """Task-graph validation and content hashing. Mirrors the engine-side checks in run_graph.mjs."""
 import hashlib
 import json
+import re
 import statistics
 
 TYPES = {"research", "review", "implement", "verify", "integrate", "synthesize"}
@@ -36,6 +37,8 @@ def validate(graph) -> list:
         tid = t.get("id")
         if not t.get("id"):
             err("id", "task missing id")
+        elif not re.fullmatch(r"[A-Za-z0-9_.-]+", t["id"]):
+            err("id-charset", f"{t['id']!r}: id must match [A-Za-z0-9_.-]+")
         if t.get("type") not in TYPES:
             err("type", f"{tid}: unknown type {t.get('type')}")
         for d in t.get("deps", []):

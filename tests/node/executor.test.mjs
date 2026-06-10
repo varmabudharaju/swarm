@@ -130,6 +130,40 @@ test('validateGraph flags fan-in over 8', () => {
   assert.ok(validateGraph(tasks, {}).some(e => e.includes('fan-in')))
 })
 
+test('plain object with __budget_null property is treated as normal success, not budget pause', async () => {
+  const fn = async () => ({ __budget_null: true, summary: 'real result' })
+  const out = await runGraph(ARGS([T('a')]), fn, null, null)
+  assert.ok('a' in out.completed)
+  assert.equal(out.paused, null)
+})
+
+test('agent_ceiling 0 causes immediate pause with zero agentFn calls', async () => {
+  const a = okAgent()
+  const out = await runGraph(ARGS([T('a'), T('b')], {}, { agent_ceiling: 0 }), a.fn, null, null)
+  assert.equal(a.calls.length, 0)
+  assert.equal(out.paused, 'agent_ceiling')
+  assert.equal(out.pending.length, 2)
+})
+
+test('agentFn throw is contained: throwing task fails, dependents skipped, independents complete, resolves', async () => {
+  const fn = async (p, opts) => {
+    if (opts.label === 'research:bad') throw new Error('agent exploded')
+    return { summary: 'ok' }
+  }
+  const tasks = [T('bad', [], { max_retries: 0 }), T('child', ['bad']), T('solo')]
+  const out = await runGraph(ARGS(tasks), fn, null, null)
+  assert.ok('bad' in out.failed || out.failed.includes('bad'))
+  assert.ok(out.skipped.includes('child'))
+  assert.ok('solo' in out.completed)
+})
+
+test('invalid task id is fatal, no agentFn calls', async () => {
+  const a = okAgent()
+  const out = await runGraph(ARGS([T('my task')]), a.fn, null, null)
+  assert.ok(out.fatal.length > 0)
+  assert.equal(a.calls.length, 0)
+})
+
 test('agent opts pass through agentType and isolation', async () => {
   const a = okAgent()
   await runGraph(ARGS([T('a', [], { agent_type: 'swarm-implementer', isolation: 'worktree', type: 'implement' })]), a.fn, null, null)

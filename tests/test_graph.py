@@ -66,6 +66,19 @@ def test_barrier_smell():
     assert "barrier" in codes(issues, "warn")
 
 
+def test_id_charset_validation():
+    # spaces and slashes should produce id-charset errors
+    bad_space = task("my task")
+    bad_slash = task("a/b")
+    ok_id = task("ok-task_1.x")
+    gr_space = g([bad_space])
+    gr_slash = g([bad_slash])
+    gr_ok = g([ok_id])
+    assert "id-charset" in codes(graph.errors(graph.validate(gr_space)))
+    assert "id-charset" in codes(graph.errors(graph.validate(gr_slash)))
+    assert "id-charset" not in codes(graph.errors(graph.validate(gr_ok)))
+
+
 def test_validate_malformed_task_no_crash():
     """A raw dict without id/type/schema must return errors but never raise."""
     raw_task = {"prompt": "x"}

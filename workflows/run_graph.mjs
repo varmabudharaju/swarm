@@ -3,6 +3,7 @@
 // and is embedded into ~/.claude/workflows/swarm-run.js by the installer.
 export const RESERVE_TOKENS = 30000
 export const FLOOR_TOKENS = 20000
+const BUDGET_NULL = { __budget_null: true }
 
 export function validateGraph(tasks, completed) {
   const errors = []
@@ -16,6 +17,9 @@ export function validateGraph(tasks, completed) {
     if (t.deps.length > 8) errors.push(`${t.id}: fan-in ${t.deps.length} > 8`)
   }
   for (const c of Object.keys(completed)) if (!ids.has(c)) errors.push(`completed id ${c} not in graph`)
+  for (const t of tasks) {
+    if (!/^[A-Za-z0-9_.-]+$/.test(t.id || '')) errors.push(`invalid task id ${JSON.stringify(t.id)}`)
+  }
   const indeg = new Map(tasks.map(t => [t.id, t.deps.length]))
   const children = new Map(tasks.map(t => [t.id, []]))
   for (const t of tasks) for (const d of t.deps) if (children.has(d)) children.get(d).push(t.id)
@@ -71,15 +75,21 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
   const attempt = async (t) => {
     let tries = 0
     while (tries <= (t.max_retries ?? 1)) {
-      const res = await agentFn(buildPrompt(argsObj, t, completed), {
-        label: `${t.type}:${t.id}`,
-        phase: t.type,
-        schema: t.schema,
-        ...(t.agent_type ? { agentType: t.agent_type } : {}),
-        ...(t.isolation ? { isolation: t.isolation } : {}),
-      })
+      let res
+      try {
+        res = await agentFn(buildPrompt(argsObj, t, completed), {
+          label: `${t.type}:${t.id}`,
+          phase: t.type,
+          schema: t.schema,
+          ...(t.agent_type ? { agentType: t.agent_type } : {}),
+          ...(t.isolation ? { isolation: t.isolation } : {}),
+        })
+      } catch (e) {
+        if (logFn) logFn(`swarm: ${t.id} threw: ${e && e.message ? e.message : e}`)
+        res = null
+      }
       if (res !== null && res !== undefined) return res
-      if (budget && budget.total && budget.remaining() < RESERVE_TOKENS) return { __budget_null: true }
+      if (budget && budget.total && budget.remaining() < RESERVE_TOKENS) return BUDGET_NULL
       tries++
     }
     return null
@@ -101,7 +111,7 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
       for (const t of tasks) {
         if (launched.has(t.id) || skippedSet.has(t.id)) continue
         if (!t.deps.every(d => d in completed)) continue
-        if (argsObj.agent_ceiling && agentsUsed >= argsObj.agent_ceiling) { paused = 'agent_ceiling'; break }
+        if (argsObj.agent_ceiling != null && agentsUsed >= argsObj.agent_ceiling) { paused = 'agent_ceiling'; break }
         if (!canAfford()) { paused = 'paused_for_budget'; break }
         launched.add(t.id)
         agentsUsed++
@@ -112,7 +122,7 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
     if (running.size === 0) break
     const { id, result } = await Promise.race(running.values())
     running.delete(id)
-    if (result && result.__budget_null) {
+    if (result === BUDGET_NULL) {
       launched.delete(id) // stays pending; resumable
       paused = 'paused_for_budget'
     } else if (result !== null && result !== undefined) {
