@@ -59,6 +59,7 @@ def _write_settings(sp: Path, settings: dict) -> None:
         backup.write_text(sp.read_text(encoding="utf-8"), encoding="utf-8")
         os.chmod(backup, mode)
     tmp = sp.with_name(f"{sp.name}.{os.getpid()}.tmp")
+    tmp.parent.mkdir(parents=True, exist_ok=True)
     tmp.write_text(json.dumps(settings, indent=2), encoding="utf-8")
     tmp.replace(sp)
     if mode is not None:

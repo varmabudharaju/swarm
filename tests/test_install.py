@@ -86,3 +86,14 @@ def test_generated_workflow_parses_as_module(tmp_path):
     text = install.generate_workflow()
     assert text.count("export const meta") == 1
     assert "SWARM-TASK run=" in text
+
+
+def test_install_creates_settings_in_nonexistent_dir(tmp_path):
+    sp = tmp_path / "nodir" / "settings.json"
+    cd = claude_dir(tmp_path)
+    install.install(sp, cd)
+    assert sp.exists()
+    s = json.loads(sp.read_text())
+    for ev in ("SubagentStop", "SessionStart"):
+        cmds = [h["command"] for e in s["hooks"][ev] for h in e["hooks"]]
+        assert any("-m swarm_lib.hook" in c for c in cmds)
