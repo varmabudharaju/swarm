@@ -73,10 +73,12 @@ def cmd_args(a) -> int:
         "graph_hash": gr.get("graph_hash"),
         "results_dir": str(runs.results_dir(rd)),
         "agent_ceiling": gr.get("agent_ceiling"),
+        "session_model": a.session_model,
         "tasks": [{
             "id": t["id"], "title": t.get("title", ""), "type": t["type"],
             "prompt": t["prompt"], "deps": t.get("deps", []),
             "agent_type": t.get("agent_type"), "isolation": t.get("isolation"),
+            "model": t.get("model"),
             "schema": t.get("schema"), "max_retries": t.get("max_retries", 1),
             "packet_path": str(rd / t.get("packet", f"packets/{t['id']}.md")),
         } for t in gr["tasks"]],
@@ -160,6 +162,8 @@ def main(argv=None) -> int:
     p = sub.add_parser("args")
     p.add_argument("graph")
     p.add_argument("--resume", action="store_true")
+    p.add_argument("--session-model", default=None,
+                   choices=["haiku", "sonnet", "opus", "fable"])
     p.set_defaults(fn=cmd_args)
 
     p = sub.add_parser("finish")

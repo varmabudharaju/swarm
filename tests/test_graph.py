@@ -95,3 +95,22 @@ def test_validate_malformed_task_no_crash():
     assert "id" in error_codes
     assert "type" in error_codes
     assert "schema-summary" in error_codes
+
+
+def test_model_allow_list():
+    from conftest import task
+    from swarm_lib import graph as g
+
+    base = {"version": 1, "tasks": [task("a", model="haiku"), task("b", model="gpt5")]}
+    issues = g.validate(base)
+    msgs = [i["msg"] for i in g.errors(issues)]
+    assert any("b: unknown model gpt5" in m for m in msgs)
+    assert not any(m.startswith("a:") for m in msgs)  # haiku on task a is legal
+
+
+def test_model_omitted_is_valid():
+    from conftest import task
+    from swarm_lib import graph as g
+
+    issues = g.validate({"version": 1, "tasks": [task("a")]})
+    assert not [i for i in g.errors(issues) if i["code"] == "model"]

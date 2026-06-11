@@ -5,6 +5,7 @@ import re
 import statistics
 
 TYPES = {"research", "review", "implement", "verify", "integrate", "synthesize"}
+MODELS = {"haiku", "sonnet", "opus", "fable"}
 FAN_IN_MAX = 8
 VERIFY_RATIO_MAX = 0.30
 TASK_COUNT_WARN = 25
@@ -41,6 +42,8 @@ def validate(graph) -> list:
             err("id-charset", f"{t['id']!r}: id must match [A-Za-z0-9_.-]+")
         if t.get("type") not in TYPES:
             err("type", f"{tid}: unknown type {t.get('type')}")
+        if t.get("model") is not None and t["model"] not in MODELS:
+            err("model", f"{tid}: unknown model {t['model']} (use haiku|sonnet|opus|fable)")
         for d in t.get("deps", []):
             if d not in idset:
                 err("dangling", f"{tid}: dep {d} does not exist")

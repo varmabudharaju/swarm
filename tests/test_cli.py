@@ -169,3 +169,28 @@ def test_abandon_refuses_missing_run(tmp_path, capsys):
     rd.mkdir()
     assert cli.main(["abandon", str(rd)]) == 1
     assert "no run at" in capsys.readouterr().out
+
+
+def test_args_includes_model_and_session_model(tmp_path, swarm_home, capsys):
+    import json
+    from conftest import make_run, task
+    from swarm_lib import cli, graph as g, paths
+
+    rd = make_run(tmp_path, tasks=[task("a", model="haiku"), task("b")])
+    gr = paths.read_json(rd / "graph.json")
+    gr["graph_hash"] = g.compute_hash(gr)
+    paths.write_json_atomic(rd / "graph.json", gr)
+    assert cli.main(["args", str(rd / "graph.json"), "--session-model", "fable"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["session_model"] == "fable"
+    by_id = {t["id"]: t for t in out["tasks"]}
+    assert by_id["a"]["model"] == "haiku"
+    assert by_id["b"]["model"] is None
+
+
+def test_args_rejects_bad_session_model(tmp_path, swarm_home):
+    import pytest
+    from swarm_lib import cli
+
+    with pytest.raises(SystemExit):
+        cli.main(["args", "/nonexistent.json", "--session-model", "gpt5"])
