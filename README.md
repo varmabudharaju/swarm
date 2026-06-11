@@ -244,6 +244,6 @@ agents/           swarm-reader, swarm-verifier, swarm-implementer definitions
 tests/            pytest suite + node:test scheduler suite
 ```
 
-Tests: `python3 -m pytest` (Python; also drives the Node suite). Design specs with full history: [`docs/superpowers/specs/`](docs/superpowers/specs/).
+Tests: `python3 -m pytest` (Python; also drives the Node suite).
 
 Sibling project: [tend](https://github.com/varmabudharaju/tend) — context hygiene for the session that *runs* swarm; swarm reads tend's rate-limit tee to size launches.
