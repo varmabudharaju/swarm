@@ -23,6 +23,18 @@ flowchart LR
 One assistant doing a huge task alone is slow and forgetful — like one person reading a 60-file codebase cover to cover. swarm works the way a good team does:
 
 1. **Plan the work as a map, not a to-do list.** Each job says exactly which other jobs it needs results from. Anything that *can* run in parallel *does* — 10 readers fan out across the codebase at once.
+
+   A to-do list runs one job at a time. A map runs everything whose ingredients are ready:
+
+   ```mermaid
+   flowchart TB
+       a["scan the routes<br/>(worker 1)"] --> v["verify the findings<br/>(worker 4)"]
+       b["scan the auth code<br/>(worker 2)"] --> v
+       c["scan the database layer<br/>(worker 3)"] --> v
+       v --> s["write the final report"]
+   ```
+
+   Workers 1, 2 and 3 run at the same time; the verifier starts the moment all three finish.
 2. **Give each worker a sealed envelope.** Workers don't share a conversation; each gets a self-contained instruction packet. A stranger could pick up the envelope and do the job — that's the test.
 3. **Save every finished job immediately.** A hook (not the worker itself) writes each result to disk the moment the worker stops. Crash, rate limit, closed laptop — finished work is never lost.
 4. **Resume by asking, never by guessing.** The next session notices the unfinished run, reports *exactly* what's done and what remains, and re-runs only the missing jobs after you approve.
@@ -63,11 +75,35 @@ Every job in the graph carries a model tier — chosen by the foreman per job, w
 | `sonnet` | clear-goal bounded work: scans, reviews, adversarial verification |
 | `haiku` | mechanical checks, extraction, formatting |
 
+How the foreman picks, as a decision tree:
+
+```mermaid
+flowchart TD
+    q1{"Is the job mechanical?<br/>checking outputs, extracting, formatting"} -->|yes| h["haiku — cheapest"]
+    q1 -->|no| q2{"Crisp goal, bounded scope?<br/>scan, review, verify"}
+    q2 -->|yes| so["sonnet"]
+    q2 -->|no| q3{"Real coding?<br/>implement, debug, refactor"}
+    q3 -->|yes| op["opus"]
+    q3 -->|no| f["inherit the session model<br/>design, synthesis, judgment"]
+```
+
 Three safety layers behind the judgment call:
 
 - **Safety-net defaults** — untagged jobs get a sensible tier by type, capped at the launching session's own tier (an opus session never silently escalates to the premium model).
 - **Failure fallback** — if a tier is unavailable or keeps failing, the final retry runs on the session model (always available), and the run report names every job that didn't run on its intended tier (`design-api: fable->inherit`). Loud, never silent.
 - **Validation** — unknown model names are rejected before launch.
+
+What happens when a tier misbehaves:
+
+```mermaid
+flowchart LR
+    t["Run the job<br/>on its assigned tier"] -->|works| d["Done"]
+    t -->|fails| r["Retry, same tier"]
+    r -->|works| d
+    r -->|fails| fb["Final retry on the session model<br/>(always available)"]
+    fb -->|works| rep["Done — and the run report says<br/>this job fell back"]
+    fb -->|fails| x["Job marked failed, loudly"]
+```
 
 ## See it
 
