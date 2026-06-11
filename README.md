@@ -8,6 +8,10 @@
 
 Give [Claude Code](https://claude.com/claude-code) one big goal — *"audit this codebase for bugs"*, *"migrate every endpoint to the new API"* — and swarm breaks it into a map of small jobs, hires a team of AI workers to run them in parallel, saves every finished job to disk, and survives any interruption. Close the laptop mid-run; resume tomorrow without redoing finished work.
 
+```bash
+pip install -e . && swarm install        # then: /swarm <goal> inside Claude Code
+```
+
 ```mermaid
 flowchart LR
     G["One big goal"] --> D["Foreman decomposes it<br/>into a map of small jobs"]
