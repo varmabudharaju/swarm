@@ -97,3 +97,39 @@ def test_install_creates_settings_in_nonexistent_dir(tmp_path):
     for ev in ("SubagentStop", "SessionStart"):
         cmds = [h["command"] for e in s["hooks"][ev] for h in e["hooks"]]
         assert any("-m swarm_lib.hook" in c for c in cmds)
+
+
+def test_uninstall_removes_only_swarm_commands_from_mixed_entry(tmp_path):
+    """Uninstall must not delete an entire entry if it also contains non-swarm commands."""
+    mixed_settings = {
+        "hooks": {
+            "SubagentStop": [
+                # Mixed entry: one swarm command and one unrelated command.
+                {
+                    "hooks": [
+                        {"type": "command", "command": "python3 -m other.tool"},
+                        {"type": "command", "command": '"/py" -m swarm_lib.hook'},
+                    ]
+                },
+                # Pure swarm-only entry — should be fully removed.
+                {
+                    "hooks": [
+                        {"type": "command", "command": '"/py" -m swarm_lib.hook'},
+                    ]
+                },
+            ]
+        }
+    }
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(mixed_settings))
+    cd = claude_dir(tmp_path)
+    install.uninstall(sp, cd)
+    s = json.loads(sp.read_text())
+    entries = s["hooks"]["SubagentStop"]
+    # Only the mixed entry should survive.
+    assert len(entries) == 1
+    cmds = [h["command"] for h in entries[0]["hooks"]]
+    # The other.tool command must be preserved.
+    assert any("other.tool" in c for c in cmds)
+    # The swarm hook must be gone.
+    assert not any("swarm_lib" in c for c in cmds)

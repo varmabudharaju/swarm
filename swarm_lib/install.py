@@ -95,10 +95,24 @@ def uninstall(settings_path, claude_dir) -> None:
     hooks = settings.get("hooks", {})
     changed = False
     for ev in list(hooks):
-        filtered = [e for e in hooks[ev] if not _has_marker([e])]
-        if len(filtered) != len(hooks[ev]):
-            changed = True
-            hooks[ev] = filtered
+        new_entries = []
+        for entry in hooks[ev]:
+            pruned_hooks = [
+                h for h in (entry.get("hooks") or [])
+                if HOOK_MARKER not in (h.get("command") or "")
+            ]
+            if len(pruned_hooks) == len(entry.get("hooks") or []):
+                # No swarm commands in this entry — keep it unchanged.
+                new_entries.append(entry)
+            elif pruned_hooks:
+                # Swarm commands removed but other commands remain — keep trimmed entry.
+                changed = True
+                new_entries.append({**entry, "hooks": pruned_hooks})
+            else:
+                # All commands in this entry were swarm commands — drop the entry.
+                changed = True
+        if changed or len(new_entries) != len(hooks[ev]):
+            hooks[ev] = new_entries
             if not hooks[ev]:
                 del hooks[ev]
     if changed:
