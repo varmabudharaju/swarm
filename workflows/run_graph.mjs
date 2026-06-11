@@ -5,6 +5,22 @@ export const RESERVE_TOKENS = 30000
 export const FLOOR_TOKENS = 20000
 const BUDGET_NULL = { __budget_null: true }
 
+export const LADDER = ['haiku', 'sonnet', 'opus', 'fable']
+export const TYPE_MODEL = {
+  research: 'sonnet', review: 'sonnet', verify: 'sonnet',
+  implement: 'opus', integrate: 'opus',
+  synthesize: null, // inherit the session model
+}
+
+export function effectiveModel(t, sessionModel) {
+  if (t.model) return t.model // planner's explicit choice always wins
+  let m = TYPE_MODEL[t.type] ?? null
+  if (m && LADDER.includes(sessionModel)) {
+    m = LADDER[Math.min(LADDER.indexOf(m), LADDER.indexOf(sessionModel))]
+  }
+  return m
+}
+
 export function validateGraph(tasks, completed) {
   const errors = []
   const ids = new Set()
@@ -19,6 +35,9 @@ export function validateGraph(tasks, completed) {
   for (const c of Object.keys(completed)) if (!ids.has(c)) errors.push(`completed id ${c} not in graph`)
   for (const t of tasks) {
     if (!/^[A-Za-z0-9_.-]+$/.test(t.id || '')) errors.push(`invalid task id ${JSON.stringify(t.id)}`)
+  }
+  for (const t of tasks) {
+    if (t.model && !LADDER.includes(t.model)) errors.push(`${t.id}: unknown model ${t.model}`)
   }
   for (const t of tasks) {
     const s = ((t.schema || {}).properties || {}).summary || {}
@@ -77,6 +96,7 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
     budget.remaining() > RESERVE_TOKENS * (running.size + 1) + FLOOR_TOKENS
 
   const attempt = async (t) => {
+    const intended = effectiveModel(t, argsObj.session_model)
     let tries = 0
     while (tries <= (t.max_retries ?? 1)) {
       let res
@@ -87,6 +107,7 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
           schema: t.schema,
           ...(t.agent_type ? { agentType: t.agent_type } : {}),
           ...(t.isolation ? { isolation: t.isolation } : {}),
+          ...(intended ? { model: intended } : {}),
         })
       } catch (e) {
         if (logFn) logFn(`swarm: ${t.id} threw: ${e && e.message ? e.message : e}`)
