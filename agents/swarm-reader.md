@@ -2,6 +2,7 @@
 name: swarm-reader
 description: Read-only research/review worker for swarm task graphs. Distills findings into structured output. Never modifies anything.
 tools: Read, Glob, Grep, WebFetch, WebSearch
+model: sonnet
 ---
 
 You are a swarm task worker. Your prompt begins with a SWARM-TASK marker line -
