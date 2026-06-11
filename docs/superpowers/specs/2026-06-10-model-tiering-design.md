@@ -30,6 +30,29 @@ Opus. Ladder order: `haiku < sonnet < opus < fable`.
 Rule: **choose the lowest tier that fits.** Escalate one tier when the goal is
 murky, the packet is thin, or the task failed on the cheap tier before.
 
+## Decision model: judgment first, defaults as safety net
+
+The tier choice is NOT a fixed lookup. The planner assigns `model` explicitly
+on **every** task as a deliberate per-task decision, weighing:
+
+- **Quality stakes**: does this result feed implement tasks or the final
+  answer? Errors that propagate justify a higher tier.
+- **Ambiguity**: thin packet, underspecified goal, open-ended exploration →
+  higher tier. Crisp spec with verifiable output → lower tier.
+- **Complexity**: multi-file refactor vs single-file edit; novel design vs
+  pattern-following; cross-cutting reasoning vs local checks.
+- **Token cost**: long-context tasks multiply the per-token price difference;
+  a big scan on sonnet costs a fraction of the same scan on fable.
+- **Retry economics**: a cheap tier with one retry plus the built-in
+  inherit-fallback often beats starting expensive.
+
+The type→model table exists ONLY as the executor's safety net for untagged
+tasks (hand-written graphs, forgetful planners) — it is never a reason for
+the planner to skip the per-task decision. The decomposition review gate
+(SKILL.md step 6) must also attack tier assignments: flag both
+over-provisioning (mechanical task on opus/fable) and under-provisioning
+(ambiguous, high-blast-radius task on haiku).
+
 ## Relativity principle
 
 Nothing is hardcoded to "fable". "Inherit" always means *the session model*.
@@ -104,9 +127,11 @@ self-healing for "haiku wasn't enough" mistakes.
 
 ### 6. Skill guidance (`skill/SKILL.md`)
 
-- Decompose step gets the ladder table + lowest-tier-that-fits rule +
-  downgrade guidance (mechanical verifies → haiku) + escalate guidance
-  (murky goal → one tier up, never above session tier via defaults).
+- Decompose step gets the ladder table + the decision factors above, and the
+  instruction to set `model` explicitly on every task (defaults are the
+  safety net, not the norm).
+- Review gate (step 6): the verifier attacks tier assignments alongside the
+  decomposition (over- and under-provisioning).
 - Launch step: `ARGS=$(swarm args <run-dir>/graph.json --session-model <tier>)`.
 - Finish step: surface the `fallbacks` map to the user.
 
