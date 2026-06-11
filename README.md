@@ -1,5 +1,9 @@
 # swarm
 
+[![tests](https://github.com/varmabudharaju/swarm/actions/workflows/ci.yml/badge.svg)](https://github.com/varmabudharaju/swarm/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](pyproject.toml)
+
 **A foreman for teams of AI agents.**
 
 Give [Claude Code](https://claude.com/claude-code) one big goal — *"audit this codebase for bugs"*, *"migrate every endpoint to the new API"* — and swarm breaks it into a map of small jobs, hires a team of AI workers to run them in parallel, saves every finished job to disk, and survives any interruption. Close the laptop mid-run; resume tomorrow without redoing finished work.
