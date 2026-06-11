@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runGraph, validateGraph, buildPrompt, RESERVE_TOKENS } from '../../workflows/run_graph.mjs'
+import { runGraph, validateGraph, buildPrompt, effectiveModel, RESERVE_TOKENS } from '../../workflows/run_graph.mjs'
 
 const T = (id, deps = [], extra = {}) => ({
   id, title: id, type: 'research', prompt: `do ${id}`, deps,
@@ -181,4 +181,69 @@ test('schema missing summary cap is fatal', async () => {
   assert.ok(out.fatal.length > 0)
   assert.ok(out.fatal.some(e => e.includes('schema must cap summary at 2000')))
   assert.equal(a.calls.length, 0)
+})
+
+test('effectiveModel: type defaults, explicit override, synthesize inherits', () => {
+  assert.equal(effectiveModel(T('a'), null), 'sonnet')                       // research
+  assert.equal(effectiveModel(T('a', [], { type: 'implement' }), null), 'opus')
+  assert.equal(effectiveModel(T('a', [], { type: 'integrate' }), null), 'opus')
+  assert.equal(effectiveModel(T('a', [], { type: 'synthesize' }), null), null)
+  assert.equal(effectiveModel(T('a', [], { model: 'haiku' }), null), 'haiku') // explicit wins
+})
+
+test('effectiveModel: session tier caps defaults but never explicit values', () => {
+  assert.equal(effectiveModel(T('a', [], { type: 'implement' }), 'sonnet'), 'sonnet') // opus capped
+  assert.equal(effectiveModel(T('a'), 'opus'), 'sonnet')                              // below cap: kept
+  assert.equal(effectiveModel(T('a', [], { model: 'fable' }), 'sonnet'), 'fable')     // explicit exceeds
+  assert.equal(effectiveModel(T('a', [], { type: 'synthesize' }), 'opus'), null)      // inherit stays inherit
+})
+
+test('runGraph passes the effective model to agent opts', async () => {
+  const a = okAgent()
+  await runGraph(ARGS([T('r'), T('i', [], { type: 'implement' }), T('s', [], { type: 'synthesize' })]), a.fn, null, null)
+  const byLabel = Object.fromEntries(a.calls.map(c => [c.opts.label, c.opts]))
+  assert.equal(byLabel['research:r'].model, 'sonnet')
+  assert.equal(byLabel['implement:i'].model, 'opus')
+  assert.equal('model' in byLabel['synthesize:s'], false)  // inherit = option absent
+})
+
+test('runGraph respects session_model cap from args', async () => {
+  const a = okAgent()
+  await runGraph(ARGS([T('i', [], { type: 'implement' })], {}, { session_model: 'sonnet' }), a.fn, null, null)
+  assert.equal(a.calls[0].opts.model, 'sonnet')
+})
+
+test('validateGraph rejects unknown model values', () => {
+  const errs = validateGraph([T('a', [], { model: 'gpt5' })], {})
+  assert.ok(errs.some(e => e.includes('unknown model')))
+  assert.deepEqual(validateGraph([T('a', [], { model: 'haiku' })], {}), [])
+})
+
+test('final retry drops the model override and records the fallback', async () => {
+  const calls = []
+  const fn = async (prompt, opts) => {
+    calls.push(opts.model ?? 'inherit')
+    return opts.model ? null : { summary: 'ok on inherit' } // tier "unavailable"
+  }
+  const logs = []
+  const out = await runGraph(ARGS([T('a')]), fn, (m) => logs.push(m), null)
+  assert.deepEqual(calls, ['sonnet', 'inherit'])      // max_retries 1: try tier, then inherit
+  assert.equal(out.completed.a.summary, 'ok on inherit')
+  assert.deepEqual(out.fallbacks, { a: 'sonnet->inherit' })
+  assert.ok(logs.some(l => l.includes("model 'sonnet' unavailable or failing")))
+})
+
+test('max_retries 0 keeps the intended model on its only attempt', async () => {
+  const calls = []
+  const fn = async (prompt, opts) => { calls.push(opts.model ?? 'inherit'); return null }
+  const out = await runGraph(ARGS([T('a', [], { max_retries: 0 })]), fn, null, null)
+  assert.deepEqual(calls, ['sonnet'])                 // never silently downgraded
+  assert.deepEqual(out.failed, ['a'])
+  assert.deepEqual(out.fallbacks, {})
+})
+
+test('no fallback recorded when the tier works first try', async () => {
+  const a = okAgent()
+  const out = await runGraph(ARGS([T('a')]), a.fn, null, null)
+  assert.deepEqual(out.fallbacks, {})
 })

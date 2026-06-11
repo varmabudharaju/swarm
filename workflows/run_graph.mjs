@@ -5,6 +5,22 @@ export const RESERVE_TOKENS = 30000
 export const FLOOR_TOKENS = 20000
 const BUDGET_NULL = { __budget_null: true }
 
+export const LADDER = ['haiku', 'sonnet', 'opus', 'fable']
+export const TYPE_MODEL = {
+  research: 'sonnet', review: 'sonnet', verify: 'sonnet',
+  implement: 'opus', integrate: 'opus',
+  synthesize: null, // inherit the session model
+}
+
+export function effectiveModel(t, sessionModel) {
+  if (t.model) return t.model // planner's explicit choice always wins
+  let m = TYPE_MODEL[t.type] ?? null
+  if (m && LADDER.includes(sessionModel)) {
+    m = LADDER[Math.min(LADDER.indexOf(m), LADDER.indexOf(sessionModel))]
+  }
+  return m
+}
+
 export function validateGraph(tasks, completed) {
   const errors = []
   const ids = new Set()
@@ -19,6 +35,9 @@ export function validateGraph(tasks, completed) {
   for (const c of Object.keys(completed)) if (!ids.has(c)) errors.push(`completed id ${c} not in graph`)
   for (const t of tasks) {
     if (!/^[A-Za-z0-9_.-]+$/.test(t.id || '')) errors.push(`invalid task id ${JSON.stringify(t.id)}`)
+  }
+  for (const t of tasks) {
+    if (t.model && !LADDER.includes(t.model)) errors.push(`${t.id}: unknown model ${t.model}`)
   }
   for (const t of tasks) {
     const s = ((t.schema || {}).properties || {}).summary || {}
@@ -64,9 +83,10 @@ export function buildPrompt(argsObj, t, completed) {
 export async function runGraph(argsObj, agentFn, logFn, budget) {
   const tasks = argsObj.tasks
   const fatal = validateGraph(tasks, argsObj.completed || {})
-  if (fatal.length) return { fatal, completed: {}, failed: [], skipped: [], pending: tasks.map(t => t.id) }
+  if (fatal.length) return { fatal, completed: {}, failed: [], skipped: [], pending: tasks.map(t => t.id), fallbacks: {} }
   const completed = { ...(argsObj.completed || {}) }
   const failedSet = new Set()
+  const fallbacks = {}
   const skippedSet = new Set()
   const launched = new Set(Object.keys(completed))
   const running = new Map()
@@ -77,8 +97,19 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
     budget.remaining() > RESERVE_TOKENS * (running.size + 1) + FLOOR_TOKENS
 
   const attempt = async (t) => {
+    const intended = effectiveModel(t, argsObj.session_model)
+    const maxTries = t.max_retries ?? 1
     let tries = 0
-    while (tries <= (t.max_retries ?? 1)) {
+    while (tries <= maxTries) {
+      // Final retry of a tiered task runs on the session model: it is by
+      // definition being served, so an unavailable/failing tier degrades
+      // loudly instead of failing the task outright.
+      const fallback = intended && tries === maxTries && tries > 0
+      if (fallback) {
+        fallbacks[t.id] = `${intended}->inherit`
+        if (logFn) logFn(`swarm: ${t.id}: model '${intended}' unavailable or failing - retrying on session model`)
+      }
+      const model = fallback ? null : intended
       let res
       try {
         res = await agentFn(buildPrompt(argsObj, t, completed), {
@@ -87,6 +118,7 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
           schema: t.schema,
           ...(t.agent_type ? { agentType: t.agent_type } : {}),
           ...(t.isolation ? { isolation: t.isolation } : {}),
+          ...(model ? { model } : {}),
         })
       } catch (e) {
         if (logFn) logFn(`swarm: ${t.id} threw: ${e && e.message ? e.message : e}`)
@@ -144,6 +176,7 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
     skipped: [...skippedSet],
     paused,
     agentsUsed,
+    fallbacks,
     pending: tasks.filter(t => !(t.id in completed) && !failedSet.has(t.id) && !skippedSet.has(t.id)).map(t => t.id),
   }
 }
