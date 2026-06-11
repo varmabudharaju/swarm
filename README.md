@@ -1,17 +1,93 @@
 # swarm
 
-Graph-first multi-agent orchestrator for Claude Code. Say `/swarm <goal>` and a
-typed task graph is decomposed, validated, adversarially reviewed, then executed
-by a generic DAG workflow with maximal parallelism. Every finished task is
-checkpointed to disk by a SubagentStop hook, so a run survives rate limits,
-killed sessions, and crashes - the next session offers `/swarm resume`, which
-asks before re-running only the missing work.
+**A foreman for teams of AI agents.**
+
+Give [Claude Code](https://claude.com/claude-code) one big goal — *"audit this codebase for bugs"*, *"migrate every endpoint to the new API"* — and swarm breaks it into a map of small jobs, hires a team of AI workers to run them in parallel, saves every finished job to disk, and survives any interruption. Close the laptop mid-run; resume tomorrow without redoing finished work.
+
+```mermaid
+flowchart LR
+    G["One big goal"] --> D["Foreman decomposes it<br/>into a map of small jobs"]
+    D --> W1["Worker"]
+    D --> W2["Worker"]
+    D --> W3["Worker"]
+    D --> W4["Worker..."]
+    W1 --> R["Every result<br/>saved to disk"]
+    W2 --> R
+    W3 --> R
+    W4 --> R
+    R --> S["Final answer,<br/>assembled from results"]
+```
+
+## The idea, in plain words
+
+One assistant doing a huge task alone is slow and forgetful — like one person reading a 60-file codebase cover to cover. swarm works the way a good team does:
+
+1. **Plan the work as a map, not a to-do list.** Each job says exactly which other jobs it needs results from. Anything that *can* run in parallel *does* — 10 readers fan out across the codebase at once.
+2. **Give each worker a sealed envelope.** Workers don't share a conversation; each gets a self-contained instruction packet. A stranger could pick up the envelope and do the job — that's the test.
+3. **Save every finished job immediately.** A hook (not the worker itself) writes each result to disk the moment the worker stops. Crash, rate limit, closed laptop — finished work is never lost.
+4. **Resume by asking, never by guessing.** The next session notices the unfinished run, reports *exactly* what's done and what remains, and re-runs only the missing jobs after you approve.
+5. **Right-size every brain.** A mechanical check doesn't need the most expensive model. The foreman picks the cheapest model tier that fits each job (details below).
+
+## What a run looks like
+
+```mermaid
+sequenceDiagram
+    participant U as You
+    participant F as Foreman (your session)
+    participant E as Executor (swarm-run workflow)
+    participant W as Workers (parallel subagents)
+    participant D as Disk (checkpoints)
+
+    U->>F: /swarm audit this codebase
+    F->>F: decompose into graph.json + one packet per job
+    F->>F: validate + adversarial review of the plan
+    F->>E: launch
+    E->>W: every unblocked job, in parallel
+    W-->>D: each finished result checkpointed by hook
+    Note over E: interrupted? rate limit? crash?
+    U->>F: /swarm resume (next session)
+    F->>U: 4/9 done, 5 remain - re-run only those?
+    U->>F: yes
+    E->>W: only the missing jobs
+    F->>U: final synthesis from all results
+```
+
+## Right-sized brains (model tiering)
+
+Every job in the graph carries a model tier — chosen by the foreman per job, weighing quality stakes, ambiguity, complexity, and token cost. **Lowest tier that fits:**
+
+| Tier | Right for |
+|---|---|
+| top model (inherit) | decomposition, ambiguous goals, final synthesis |
+| `opus` | real coding: implementing, debugging, refactoring |
+| `sonnet` | clear-goal bounded work: scans, reviews, adversarial verification |
+| `haiku` | mechanical checks, extraction, formatting |
+
+Three safety layers behind the judgment call:
+
+- **Safety-net defaults** — untagged jobs get a sensible tier by type, capped at the launching session's own tier (an opus session never silently escalates to the premium model).
+- **Failure fallback** — if a tier is unavailable or keeps failing, the final retry runs on the session model (always available), and the run report names every job that didn't run on its intended tier (`design-api: fable->inherit`). Loud, never silent.
+- **Validation** — unknown model names are rejected before launch.
+
+## See it
+
+| Mid-run | Completed | Resume nag in a fresh session |
+|---|---|---|
+| ![mid-run](docs/screenshots/01-swarm-status-midrun.png) | ![completed](docs/screenshots/01-swarm-status-completed.png) | ![resume](docs/screenshots/02-swarm-resume-nag.png) |
+
+## Proven in the field
+
+swarm's first production run reviewed its own sibling tool: a 9-agent adversarial audit of [tend](https://github.com/varmabudharaju/tend) — 6 specialized reviewers, 2 independent verifiers that reproduced every claim against the installed binary, then synthesis. The run was deliberately interrupted at 4/9 tasks and resumed in a different session: the 4 finished tasks short-circuited, only the 5 missing ones ran. Output: 33 confirmed findings (2 high-severity), every one of which was fixed in tend v0.2. Evidence with screenshots: [`docs/test-evidence.md`](docs/test-evidence.md).
 
 ## Install
 
-    python3 -m pip install --user -e .
-    swarm install        # hooks into settings.json; copies skill/workflow/agents
-    # restart your Claude Code session
+```bash
+python3 -m pip install --user -e .
+swarm install        # hooks into settings.json; copies skill/workflow/agents
+# restart your Claude Code session
+```
+
+Then in Claude Code: `/swarm <goal>` — or `/swarm resume` after an interruption.
 
 ## Pieces
 
@@ -19,29 +95,46 @@ asks before re-running only the missing work.
 |---|---|---|
 | `swarm` skill | `~/.claude/skills/swarm/` | decomposition + resume protocol |
 | `swarm-run` workflow | `~/.claude/workflows/swarm-run.js` | pure DAG scheduler (generated) |
-| worker agents | `~/.claude/agents/swarm-*.md` | least-privilege reader/verifier/implementer |
+| worker agents | `~/.claude/agents/swarm-*.md` | least-privilege reader/verifier/implementer, tiered models |
 | hooks | settings.json (SubagentStop, SessionStart) | checkpoints + resume nag |
 | run state | `~/.claude/swarm/runs/<project>/<run-id>/` | graph, packets, results, state |
 
 ## CLI
 
-    swarm validate <graph.json> [--print-hash]
-    swarm args <graph.json> [--resume]     # workflow args; --resume takes the lock
-    swarm status <run-dir>
-    swarm finish <run-dir> --status completed|paused_for_budget|failed-partial
-    swarm abandon <run-dir>
-    swarm install / swarm uninstall
+```bash
+swarm validate <graph.json> [--print-hash]
+swarm args <graph.json> [--resume] [--session-model <tier>]
+swarm status <run-dir>
+swarm finish <run-dir> --status completed|paused_for_budget|failed-partial
+swarm abandon <run-dir>
+swarm install / swarm uninstall
+```
 
-Tests: `python3 -m pytest` (Python) and `node --test tests/node/` (scheduler).
-Spec: `docs/superpowers/specs/2026-06-10-swarm-orchestrator-design.md`.
-Sibling project: [tend](/Users/varma/tend) - context hygiene; swarm reads its
-rate-limit tee for launch headroom.
+## Guardrails
 
-Worker activity is audited machine-wide by agent-pd (hash-chained per-session logs in ~/.claude/pd/audit/).
+- **Graphs are validated before launch** (unique ids, no cycles, fan-in caps, schema checks, model allow-list) and **adversarially reviewed** by a verifier agent that attacks the decomposition itself: missing tasks, fake parallelism, thin packets, over- or under-provisioned model tiers.
+- **Implement jobs are quarantined** in isolated git worktrees on their own branches; the merge to your branch happens only in your session, only with your approval.
+- **Budget- and ceiling-aware**: the executor pauses (resumably) instead of blowing through token budgets or agent ceilings.
+- **Tamper-evident state**: results are bound to a content hash of the graph; editing the graph after results exist correctly refuses to resume.
+
+Worker activity is audited machine-wide by [agent-pd](https://github.com/varmabudharaju/agent-pd) (hash-chained per-session logs in `~/.claude/pd/audit/`).
 
 ## Managed paths
 
-`swarm install` owns these locations and will overwrite/delete them on
-reinstall/uninstall - do not hand-edit:
-`~/.claude/skills/swarm/`, `~/.claude/agents/swarm-{reader,verifier,implementer}.md`,
-`~/.claude/workflows/swarm-run.js` (generated; edit sources in this repo).
+`swarm install` owns these locations and will overwrite/delete them on reinstall/uninstall — do not hand-edit: `~/.claude/skills/swarm/`, `~/.claude/agents/swarm-{reader,verifier,implementer}.md`, `~/.claude/workflows/swarm-run.js` (generated; edit sources in this repo).
+
+## Under the hood
+
+```
+swarm_lib/        Python: CLI, graph validation/hashing, checkpoint hook,
+                  run state, marker protocol, reversible installer
+workflows/        run_graph.mjs - pure DAG scheduler (no runtime deps,
+                  Node-testable, embedded into the installed workflow)
+skill/            the /swarm skill + graph-format / packet / shape references
+agents/           swarm-reader, swarm-verifier, swarm-implementer definitions
+tests/            pytest suite + node:test scheduler suite
+```
+
+Tests: `python3 -m pytest` (Python; also drives the Node suite). Design specs with full history: [`docs/superpowers/specs/`](docs/superpowers/specs/).
+
+Sibling project: [tend](https://github.com/varmabudharaju/tend) — context hygiene for the session that *runs* swarm; swarm reads tend's rate-limit tee to size launches.
