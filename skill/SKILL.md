@@ -41,6 +41,12 @@ SubagentStop hook automatically - workers never manage their own persistence.
    Target width near 16 (the concurrency cap); going wider buys queueing, not speed.
    Verify tiers: one verifier per 4-6 sibling finding-tasks; per-task verify only
    for results feeding implement tasks.
+   Assign `model` explicitly per task (lowest tier that fits - see
+   references/graph-format.md "Model tiers"): weigh quality stakes (does the
+   result feed implement tasks?), ambiguity, complexity, token cost, retry
+   economics. Mechanical checks -> haiku; bounded scans/verifies -> sonnet;
+   real coding -> opus; judgment/synthesis -> omit (inherit). Defaults are a
+   safety net, not a reason to skip the decision.
 4. **Packets**: write one `packets/<id>.md` per task per
    `references/packet-guide.md`. Self-containment test: could a stranger with
    only this packet + prompt do the work? If not, the packet is incomplete.
@@ -48,12 +54,17 @@ SubagentStop hook automatically - workers never manage their own persistence.
    treat warnings as design feedback, not noise.
 6. **Review gate**: spawn ONE swarm-verifier agent with the goal + graph.json
    content; ask it to attack the decomposition (missing tasks, fake width, fan-in
-   mush, packet gaps). Fix what it finds.
-7. **Launch**: `ARGS=$(swarm args <run-dir>/graph.json)`, then invoke the
-   Workflow tool: `{name: "swarm-run", args: <parsed ARGS JSON>}`.
+   mush, packet gaps, model tiers over- or under-provisioned for the task).
+   Fix what it finds.
+7. **Launch**: `ARGS=$(swarm args <run-dir>/graph.json --session-model <your-tier>)`
+   where `<your-tier>` is THIS session's model tier (haiku|sonnet|opus|fable -
+   you know your own model), then invoke the Workflow tool:
+   `{name: "swarm-run", args: <parsed ARGS JSON>}`.
 8. **Finish**: when the workflow returns, act on its state:
    - completed cleanly -> `swarm finish <run-dir> --status completed`, then
      synthesize/present results (read full result files, not just summaries).
+   - if the result has a non-empty `fallbacks` map, tell the user which tasks
+     did not run on their intended tier (e.g. "design-api: fable->inherit").
    - `paused == "paused_for_budget"` or `"agent_ceiling"` ->
      `swarm finish <run-dir> --status paused_for_budget`; tell the user what
      remains and how to resume.

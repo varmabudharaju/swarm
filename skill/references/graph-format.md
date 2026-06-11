@@ -24,6 +24,7 @@ you the expected value).
       "deps": [],
       "agent_type": "swarm-reader",
       "isolation": null,
+      "model": "sonnet",
       "schema": {
         "type": "object",
         "properties": {
@@ -48,3 +49,21 @@ implement (swarm-implementer + isolation worktree), integrate (general-purpose +
 isolation worktree), synthesize (general-purpose).
 
 Implement-task schema must add: branch, worktree_path, files_touched, commits.
+
+## Model tiers
+
+Optional per-task `model`: one of `haiku | sonnet | opus | fable` (tier
+aliases only — versions are not addressable). Set it EXPLICITLY on every task
+as a per-task judgment weighing quality stakes, ambiguity, complexity, token
+cost, and retry economics — lowest tier that fits:
+
+- `fable`/omit: decomposition-grade reasoning, ambiguous goals, final synthesis
+- `opus`: real coding (implement/integrate, debugging, refactors)
+- `sonnet`: clear-goal bounded work (scans, diff review, adversarial verify)
+- `haiku`: mechanical (output/schema checks, extraction, formatting, capture)
+
+Omitted -> the executor applies safety-net defaults by type
+(research/review/verify -> sonnet; implement/integrate -> opus; synthesize ->
+inherit), capped at the launching session's tier (`session_model`). Explicit
+values are never capped. If a tier fails every retry, the final retry re-runs
+on the session model and the run report lists it under `fallbacks`.
