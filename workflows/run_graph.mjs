@@ -83,9 +83,10 @@ export function buildPrompt(argsObj, t, completed) {
 export async function runGraph(argsObj, agentFn, logFn, budget) {
   const tasks = argsObj.tasks
   const fatal = validateGraph(tasks, argsObj.completed || {})
-  if (fatal.length) return { fatal, completed: {}, failed: [], skipped: [], pending: tasks.map(t => t.id) }
+  if (fatal.length) return { fatal, completed: {}, failed: [], skipped: [], pending: tasks.map(t => t.id), fallbacks: {} }
   const completed = { ...(argsObj.completed || {}) }
   const failedSet = new Set()
+  const fallbacks = {}
   const skippedSet = new Set()
   const launched = new Set(Object.keys(completed))
   const running = new Map()
@@ -97,8 +98,18 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
 
   const attempt = async (t) => {
     const intended = effectiveModel(t, argsObj.session_model)
+    const maxTries = t.max_retries ?? 1
     let tries = 0
-    while (tries <= (t.max_retries ?? 1)) {
+    while (tries <= maxTries) {
+      // Final retry of a tiered task runs on the session model: it is by
+      // definition being served, so an unavailable/failing tier degrades
+      // loudly instead of failing the task outright.
+      const fallback = intended && tries === maxTries && tries > 0
+      if (fallback) {
+        fallbacks[t.id] = `${intended}->inherit`
+        if (logFn) logFn(`swarm: ${t.id}: model '${intended}' unavailable or failing - retrying on session model`)
+      }
+      const model = fallback ? null : intended
       let res
       try {
         res = await agentFn(buildPrompt(argsObj, t, completed), {
@@ -107,7 +118,7 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
           schema: t.schema,
           ...(t.agent_type ? { agentType: t.agent_type } : {}),
           ...(t.isolation ? { isolation: t.isolation } : {}),
-          ...(intended ? { model: intended } : {}),
+          ...(model ? { model } : {}),
         })
       } catch (e) {
         if (logFn) logFn(`swarm: ${t.id} threw: ${e && e.message ? e.message : e}`)
@@ -165,6 +176,7 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
     skipped: [...skippedSet],
     paused,
     agentsUsed,
+    fallbacks,
     pending: tasks.filter(t => !(t.id in completed) && !failedSet.has(t.id) && !skippedSet.has(t.id)).map(t => t.id),
   }
 }

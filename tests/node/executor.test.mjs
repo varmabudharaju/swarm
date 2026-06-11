@@ -218,3 +218,32 @@ test('validateGraph rejects unknown model values', () => {
   assert.ok(errs.some(e => e.includes('unknown model')))
   assert.deepEqual(validateGraph([T('a', [], { model: 'haiku' })], {}), [])
 })
+
+test('final retry drops the model override and records the fallback', async () => {
+  const calls = []
+  const fn = async (prompt, opts) => {
+    calls.push(opts.model ?? 'inherit')
+    return opts.model ? null : { summary: 'ok on inherit' } // tier "unavailable"
+  }
+  const logs = []
+  const out = await runGraph(ARGS([T('a')]), fn, (m) => logs.push(m), null)
+  assert.deepEqual(calls, ['sonnet', 'inherit'])      // max_retries 1: try tier, then inherit
+  assert.equal(out.completed.a.summary, 'ok on inherit')
+  assert.deepEqual(out.fallbacks, { a: 'sonnet->inherit' })
+  assert.ok(logs.some(l => l.includes("model 'sonnet' unavailable or failing")))
+})
+
+test('max_retries 0 keeps the intended model on its only attempt', async () => {
+  const calls = []
+  const fn = async (prompt, opts) => { calls.push(opts.model ?? 'inherit'); return null }
+  const out = await runGraph(ARGS([T('a', [], { max_retries: 0 })]), fn, null, null)
+  assert.deepEqual(calls, ['sonnet'])                 // never silently downgraded
+  assert.deepEqual(out.failed, ['a'])
+  assert.deepEqual(out.fallbacks, {})
+})
+
+test('no fallback recorded when the tier works first try', async () => {
+  const a = okAgent()
+  const out = await runGraph(ARGS([T('a')]), a.fn, null, null)
+  assert.deepEqual(out.fallbacks, {})
+})
