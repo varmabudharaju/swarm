@@ -1,0 +1,4 @@
+shots:
+  - kind: cli
+    command: swarm status ~/.claude/swarm/runs/-Users-varma-tend/2026-06-10-tend-review
+    name: swarm-status-completed
