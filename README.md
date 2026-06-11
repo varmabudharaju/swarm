@@ -161,6 +161,79 @@ Worker activity is audited machine-wide by [agent-pd](https://github.com/varmabu
 
 ## Under the hood
 
+### System design — who talks to whom
+
+```mermaid
+flowchart TB
+    subgraph foreman ["Planning session - the foreman"]
+        SK["swarm skill<br/>decompose, validate, review, launch"]
+        CLI2["swarm CLI<br/>validate / args / status / finish"]
+    end
+    subgraph engine ["Workflow engine"]
+        WF["swarm-run.js<br/>pure DAG scheduler"]
+    end
+    subgraph team ["Worker subagents - parallel"]
+        W1["swarm-reader<br/>sonnet"]
+        W2["swarm-verifier<br/>sonnet"]
+        W3["swarm-implementer<br/>opus, isolated worktree"]
+    end
+    subgraph rundir ["Durable run state on disk"]
+        GJ["graph.json - content-hashed"]
+        PK["packets/ID.md - sealed envelopes"]
+        RS["results/ID.json - checkpoints"]
+        LK["run-state.json + resume.lock"]
+    end
+    HK["SubagentStop hook<br/>the checkpointer"]
+    NAG["SessionStart hook<br/>the resume nag"]
+    SK --> CLI2
+    SK -->|"writes"| GJ
+    SK -->|"writes"| PK
+    SK -->|"launch with session model tier"| WF
+    WF -->|"spawn, right-sized model"| W1
+    WF -->|"spawn"| W2
+    WF -->|"spawn"| W3
+    W1 -.->|"on finish, hook fires"| HK
+    W2 -.-> HK
+    W3 -.-> HK
+    HK -->|"writes checkpoint"| RS
+    NAG -->|"unfinished run found:<br/>offer /swarm resume"| SK
+    CLI2 -->|"--resume: rebuilds completed map"| RS
+```
+
+The trick that makes runs unkillable: **workers never save their own results.** A hook outside the worker writes the checkpoint the moment each worker stops — so a crash can interrupt a job, but never lose a finished one.
+
+### Flow chart — the scheduler loop
+
+What `runGraph()` does until the run is over:
+
+```mermaid
+flowchart TD
+    s["start / resume"] --> r{"any job whose<br/>dependencies are all done?"}
+    r -->|yes| g{"token budget and<br/>agent ceiling OK?"}
+    g -->|yes| sp["spawn worker<br/>at its effective model tier"] --> r
+    g -->|no| pz["pause - run stays resumable"]
+    r -->|"no, but workers running"| w["wait for the next finish"]
+    w --> rec["record result,<br/>or fallback, or failure;<br/>skip jobs downstream of failures"]
+    rec --> r
+    r -->|"no, and nothing running"| d["return completed / failed /<br/>skipped / fallbacks"]
+```
+
+### State diagram — the life of a run
+
+```mermaid
+stateDiagram-v2
+    [*] --> Planned: graph validated + adversarially reviewed
+    Planned --> Running: launch
+    Running --> Completed: every job done
+    Running --> Paused: budget, ceiling, or interruption
+    Paused --> Running: /swarm resume - user approves, only missing jobs re-run
+    Running --> FailedPartial: some jobs failed after retries
+    FailedPartial --> Running: resume retries the missing work
+    Completed --> [*]: synthesis from full results
+```
+
+### Modules
+
 ```
 swarm_lib/        Python: CLI, graph validation/hashing, checkpoint hook,
                   run state, marker protocol, reversible installer
