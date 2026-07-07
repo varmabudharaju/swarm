@@ -3,7 +3,7 @@
   "run_id": "2026-07-07-smoke",
   "goal": "smoke test for allowed_models policy enforcement",
   "project": "/tmp/smoke",
-  "graph_hash": "4b6cc61e3c8dbfdf",
+  "graph_hash": "1f7bdef3f8b64777",
   "budget_tokens": null,
   "agent_ceiling": null,
   "allowed_models": [

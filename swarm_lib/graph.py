@@ -16,11 +16,16 @@ SUMMARY_MAX = 2000
 
 def compute_hash(graph) -> str:
     payload = graph.get("tasks", [])
-    if graph.get("allowed_models") is not None:
+    am = graph.get("allowed_models")
+    if am is not None:
         # Fold the model policy into the hash so editing it after results
         # exist is caught. Absent policy keeps the legacy tasks-only blob,
-        # so pre-ladder runs keep their hashes and stay resumable.
-        payload = {"allowed_models": graph["allowed_models"], "tasks": payload}
+        # so pre-ladder runs keep their hashes and stay resumable. Normalize
+        # order so a mere re-serialization of the same policy can't spuriously
+        # change the hash; only sort a clean list of strings (malformed values
+        # keep their shape and are caught by validate()).
+        key = sorted(am) if isinstance(am, list) and all(isinstance(m, str) for m in am) else am
+        payload = {"allowed_models": key, "tasks": payload}
     blob = json.dumps(payload, sort_keys=True).encode()
     return hashlib.sha256(blob).hexdigest()[:16]
 
@@ -65,12 +70,15 @@ def validate(graph) -> list:
             err("id-charset", f"{t['id']!r}: id must match [A-Za-z0-9_.-]+")
         if t.get("type") not in TYPES:
             err("type", f"{tid}: unknown type {t.get('type')}")
-        if t.get("model") is not None and t["model"] not in MODELS:
-            err("model", f"{tid}: unknown model {t['model']} (use haiku|sonnet|opus|fable)")
-        if (t.get("model") in MODELS and am_ok and am is not None
-                and t["model"] not in am):
+        m = t.get("model")
+        # isinstance guard first: an unhashable model (list/dict) must yield a
+        # clean 'model' error, never a raw TypeError from `m not in MODELS`.
+        model_ok = isinstance(m, str) and m in MODELS
+        if m is not None and not model_ok:
+            err("model", f"{tid}: unknown model {m} (use haiku|sonnet|opus|fable)")
+        if model_ok and am_ok and am is not None and m not in am:
             err("model-policy",
-                f"{tid}: model {t['model']} not in allowed_models {am}")
+                f"{tid}: model {m} not in allowed_models {am}")
         if t.get("effort") is not None and (
                 not isinstance(t["effort"], str) or t["effort"] not in EFFORTS):
             err("effort", f"{tid}: unknown effort {t['effort']!r} (use low|medium|high|xhigh|max)")
