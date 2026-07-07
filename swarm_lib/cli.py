@@ -1,9 +1,11 @@
 """swarm CLI: validate | args | finish | status | abandon | install | uninstall."""
 import argparse
+import datetime
 import json
 import os
 import sys
 import time
+import traceback
 from pathlib import Path
 
 from . import graph as graph_mod
@@ -149,7 +151,19 @@ def cmd_gc(a) -> int:
 
 
 def cmd_install_workflow(a) -> int:
-    install_mod.install_workflow(a.claude_dir)
+    # This runs on EVERY plugin SessionStart, so it must fail open: a hook can
+    # never break session start. Mirror swarm_lib/hook.py - swallow any error,
+    # log one line to paths.log_path(), and still return 0.
+    try:
+        install_mod.install_workflow(a.claude_dir)
+    except BaseException:
+        try:
+            paths.home().mkdir(parents=True, exist_ok=True)
+            with open(paths.log_path(), "a") as f:
+                f.write(f"--- {datetime.datetime.now().isoformat()}\n"
+                        f"install-workflow failed:\n{traceback.format_exc()}\n")
+        except Exception:
+            pass
     return 0
 
 
