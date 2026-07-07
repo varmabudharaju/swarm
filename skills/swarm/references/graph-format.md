@@ -55,7 +55,7 @@ Implement-task schema must add: branch, worktree_path, files_touched, commits.
 
 Graph-level `allowed_models` (optional) is the run's model policy, chosen by
 the user at launch: `economy` = haiku|sonnet|opus (default), `duo` =
-sonnet|opus, `premium` = +fable. It is folded into graph_hash, enforced by
+sonnet|opus, `premium` = haiku|sonnet|opus|fable. It is folded into graph_hash, enforced by
 validation (every explicit task model must be inside it), and the executor
 clamps type-defaults into it (nearest allowed tier above, else below).
 Omitted -> all four models allowed (pre-ladder graphs keep their hashes).
