@@ -185,3 +185,31 @@ def test_effort_unknown_rejected():
     for bad in ("turbo", "", 3, ["low"]):
         gr = g([task("a", effort=bad)])
         assert "effort" in codes(graph.errors(graph.validate(gr))), repr(bad)
+
+
+def test_task_model_nonstring_no_crash():
+    """A list/dict task model must yield a clean model error, never a TypeError."""
+    for bad in (["opus"], {}, {"model": "opus"}, 3):
+        gr = g([task("a", model=bad)])
+        assert "model" in codes(graph.errors(graph.validate(gr))), repr(bad)
+        # and it must never spuriously fire a model-policy error against a policy
+        gr2 = g([task("a", model=bad)], allowed_models=["sonnet", "opus"])
+        cs = codes(graph.errors(graph.validate(gr2)))
+        assert "model" in cs and "model-policy" not in cs, repr(bad)
+
+
+def test_hash_ignores_allowed_models_order():
+    """Reordering allowed_models must not change the hash; a real policy change must."""
+    tasks = [task("a")]
+    h1 = graph.compute_hash({"tasks": tasks, "allowed_models": ["sonnet", "opus"]})
+    h2 = graph.compute_hash({"tasks": tasks, "allowed_models": ["opus", "sonnet"]})
+    assert h1 == h2
+    h_other = graph.compute_hash({"tasks": tasks, "allowed_models": ["haiku", "opus"]})
+    assert h1 != h_other
+
+
+def test_premium_fable_graph_accepted():
+    """A graph that opts into fable and pins a task to it must validate cleanly."""
+    gr = g([task("a", model="fable")],
+           allowed_models=["haiku", "sonnet", "opus", "fable"])
+    assert graph.errors(graph.validate(gr)) == []
