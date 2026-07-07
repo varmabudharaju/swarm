@@ -76,3 +76,28 @@ End-to-end through the installed CLI, captured as real Terminal screenshots
    validates (`ok: 1 tasks, hash a261b8731b54fb9c` — note the hash covers
    `allowed_models`) and `swarm args` emits the policy to the workflow:
    ![accepts and emits](screenshots/02-ladder-accepts-and-emits.png)
+
+## Self-hosted audit -> fix pipeline (2026-07-07, v0.3 ladders + effort)
+
+Two production swarm runs against swarm itself, exercising per-run model
+ladders (economy: haiku/sonnet/opus), per-task effort, the adversarial review
+gate, and worktree-quarantined implement tasks end to end.
+
+1. **Audit run** (`2026-07-07-v03-audit`, 10 tasks, 0 fallbacks): 6 parallel
+   sonnet scanners + 1 haiku mechanical checker -> 2 sonnet verifiers -> opus
+   synthesis. 32 findings -> **31 CONFIRMED / 1 uncertain / 0 refuted**. The
+   pre-launch gate fixed 5 plan defects before any agent spawned.
+2. **Fix run** (`2026-07-07-v03-fixes`, 7 tasks): 5 implementers in isolated
+   worktrees on disjoint files -> integrate (zero conflicts) -> adversarial
+   verify at effort=high: **22/22 FIXED, 0 regressions**, suite 98 -> 119
+   tests, node 39/39. Two worker failures (one tooling-blocked, one junk
+   summary) were absorbed: both left correct edits in their worktrees, the
+   integrator committed them, the verifier re-reproduced every original bug
+   against the merged code. The pre-launch gate returned FIX-FIRST and caught
+   4 orphaned findings plus a fixture-hash regression the plan would have
+   shipped.
+   ![fix run completed](screenshots/03-fix-swarm-status-completed.png)
+
+Known descope: pyproject non-editable packaging still requires `pip install
+-e .` or the plugin path; it now fails loud (SettingsError) instead of a raw
+traceback.
