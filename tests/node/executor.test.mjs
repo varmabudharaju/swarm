@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runGraph, validateGraph, buildPrompt, effectiveModel, RESERVE_TOKENS } from '../../workflows/run_graph.mjs'
+import { runGraph, validateGraph, buildPrompt, effectiveModel, clampToLadder, RESERVE_TOKENS } from '../../workflows/run_graph.mjs'
 
 const T = (id, deps = [], extra = {}) => ({
   id, title: id, type: 'research', prompt: `do ${id}`, deps,
@@ -211,6 +211,52 @@ test('runGraph respects session_model cap from args', async () => {
   const a = okAgent()
   await runGraph(ARGS([T('i', [], { type: 'implement' })], {}, { session_model: 'sonnet' }), a.fn, null, null)
   assert.equal(a.calls[0].opts.model, 'sonnet')
+})
+
+test('clampToLadder: in-set and null pass through; below rides up; above rides down', () => {
+  assert.equal(clampToLadder('sonnet', ['sonnet', 'opus']), 'sonnet')
+  assert.equal(clampToLadder(null, ['sonnet', 'opus']), null)          // inherit untouched
+  assert.equal(clampToLadder('haiku', ['sonnet', 'opus']), 'sonnet')   // duo: nearest above
+  assert.equal(clampToLadder('fable', ['haiku', 'sonnet', 'opus']), 'opus') // economy: nearest below
+  assert.equal(clampToLadder('sonnet', ['haiku', 'opus']), 'opus')     // gap set: above wins first
+  assert.equal(clampToLadder('opus', null), 'opus')                    // no policy: untouched
+  assert.equal(clampToLadder('opus', []), 'opus')                      // empty treated as no policy
+})
+
+test('effectiveModel: ladder clamps defaults, then session cap still wins', () => {
+  // duo ladder: research default sonnet is in-set; implement default opus in-set
+  assert.equal(effectiveModel(T('a'), null, ['sonnet', 'opus']), 'sonnet')
+  // explicit-null synthesize must stay inherit regardless of ladder
+  assert.equal(effectiveModel(T('a', [], { type: 'synthesize' }), 'opus', ['sonnet', 'opus']), null)
+  // session cap applies AFTER clamping and wins even below the ladder floor
+  assert.equal(effectiveModel(T('a', [], { type: 'implement' }), 'sonnet', ['sonnet', 'opus']), 'sonnet')
+  assert.equal(effectiveModel(T('a', [], { type: 'implement' }), 'haiku', ['sonnet', 'opus']), 'haiku')
+  // explicit model is never clamped at runtime (validation owns that contract)
+  assert.equal(effectiveModel(T('a', [], { model: 'fable' }), 'opus', ['sonnet', 'opus']), 'fable')
+})
+
+test('validateGraph rejects task models outside allowed_models', () => {
+  const errs = validateGraph([T('a', [], { model: 'fable' })], {}, ['sonnet', 'opus'])
+  assert.ok(errs.some(e => e.includes('not in allowed_models')))
+  assert.deepEqual(validateGraph([T('a', [], { model: 'opus' })], {}, ['sonnet', 'opus']), [])
+  assert.deepEqual(validateGraph([T('a', [], { model: 'fable' })], {}), []) // no policy: legal
+})
+
+test('runGraph threads allowed_models into spawn models', async () => {
+  const a = okAgent()
+  await runGraph(ARGS([T('r'), T('i', [], { type: 'implement' })], {},
+    { allowed_models: ['sonnet', 'opus'] }), a.fn, null, null)
+  const byLabel = Object.fromEntries(a.calls.map(c => [c.opts.label, c.opts]))
+  assert.equal(byLabel['research:r'].model, 'sonnet')
+  assert.equal(byLabel['implement:i'].model, 'opus')
+})
+
+test('runGraph refuses a graph whose task model violates the run policy', async () => {
+  const a = okAgent()
+  const out = await runGraph(ARGS([T('a', [], { model: 'fable' })], {},
+    { allowed_models: ['sonnet', 'opus'] }), a.fn, null, null)
+  assert.ok(out.fatal.some(e => e.includes('not in allowed_models')))
+  assert.equal(a.calls.length, 0)
 })
 
 test('validateGraph rejects unknown model values', () => {

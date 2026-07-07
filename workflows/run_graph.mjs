@@ -12,16 +12,29 @@ export const TYPE_MODEL = {
   synthesize: null, // inherit the session model
 }
 
-export function effectiveModel(t, sessionModel) {
+// Clamp a type-default model into the run's allowed ladder: nearest allowed
+// tier above on the universal LADDER, else nearest below. Explicit per-task
+// models never pass through here — validation enforces their membership.
+export function clampToLadder(m, allowed) {
+  if (!m || !allowed || !allowed.length || allowed.includes(m)) return m
+  const i = LADDER.indexOf(m)
+  for (let j = i + 1; j < LADDER.length; j++) if (allowed.includes(LADDER[j])) return LADDER[j]
+  for (let j = i - 1; j >= 0; j--) if (allowed.includes(LADDER[j])) return LADDER[j]
+  return m
+}
+
+export function effectiveModel(t, sessionModel, allowedModels) {
   if (t.model) return t.model // planner's explicit choice always wins
-  let m = TYPE_MODEL[t.type] ?? null
+  let m = clampToLadder(TYPE_MODEL[t.type] ?? null, allowedModels)
   if (m && LADDER.includes(sessionModel)) {
+    // Session cap applies after the ladder and wins: a run may go cheaper
+    // than its ladder floor, never dearer than the launching session.
     m = LADDER[Math.min(LADDER.indexOf(m), LADDER.indexOf(sessionModel))]
   }
   return m
 }
 
-export function validateGraph(tasks, completed) {
+export function validateGraph(tasks, completed, allowedModels) {
   const errors = []
   const ids = new Set()
   for (const t of tasks) {
@@ -38,6 +51,9 @@ export function validateGraph(tasks, completed) {
   }
   for (const t of tasks) {
     if (t.model && !LADDER.includes(t.model)) errors.push(`${t.id}: unknown model ${t.model}`)
+    else if (t.model && allowedModels && allowedModels.length && !allowedModels.includes(t.model)) {
+      errors.push(`${t.id}: model ${t.model} not in allowed_models [${allowedModels.join(', ')}]`)
+    }
   }
   for (const t of tasks) {
     const s = ((t.schema || {}).properties || {}).summary || {}
@@ -82,7 +98,7 @@ export function buildPrompt(argsObj, t, completed) {
 
 export async function runGraph(argsObj, agentFn, logFn, budget) {
   const tasks = argsObj.tasks
-  const fatal = validateGraph(tasks, argsObj.completed || {})
+  const fatal = validateGraph(tasks, argsObj.completed || {}, argsObj.allowed_models)
   if (fatal.length) return { fatal, completed: {}, failed: [], skipped: [], pending: tasks.map(t => t.id), fallbacks: {} }
   const completed = { ...(argsObj.completed || {}) }
   const failedSet = new Set()
@@ -97,7 +113,7 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
     budget.remaining() > RESERVE_TOKENS * (running.size + 1) + FLOOR_TOKENS
 
   const attempt = async (t) => {
-    const intended = effectiveModel(t, argsObj.session_model)
+    const intended = effectiveModel(t, argsObj.session_model, argsObj.allowed_models)
     const maxTries = t.max_retries ?? 1
     let tries = 0
     while (tries <= maxTries) {
