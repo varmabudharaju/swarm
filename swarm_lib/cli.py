@@ -80,6 +80,7 @@ def cmd_args(a) -> int:
             "prompt": t["prompt"], "deps": t.get("deps", []),
             "agent_type": t.get("agent_type"), "isolation": t.get("isolation"),
             "model": t.get("model"),
+            "effort": t.get("effort"),
             "schema": t.get("schema"), "max_retries": t.get("max_retries", 1),
             "packet_path": str(rd / t.get("packet", f"packets/{t['id']}.md")),
         } for t in gr["tasks"]],

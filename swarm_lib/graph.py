@@ -6,6 +6,7 @@ import statistics
 
 TYPES = {"research", "review", "implement", "verify", "integrate", "synthesize"}
 MODELS = {"haiku", "sonnet", "opus", "fable"}
+EFFORTS = {"low", "medium", "high", "xhigh", "max"}
 FAN_IN_MAX = 8
 VERIFY_RATIO_MAX = 0.30
 TASK_COUNT_WARN = 25
@@ -70,6 +71,9 @@ def validate(graph) -> list:
                 and t["model"] not in am):
             err("model-policy",
                 f"{tid}: model {t['model']} not in allowed_models {am}")
+        if t.get("effort") is not None and (
+                not isinstance(t["effort"], str) or t["effort"] not in EFFORTS):
+            err("effort", f"{tid}: unknown effort {t['effort']!r} (use low|medium|high|xhigh|max)")
         for d in t.get("deps", []):
             if d not in idset:
                 err("dangling", f"{tid}: dep {d} does not exist")

@@ -172,3 +172,16 @@ def test_allowed_models_nonstring_entry_no_crash():
     for bad in (["haiku", ["nested"]], ["sonnet", {"m": 1}], ["opus", 3]):
         gr = g([task("a")], allowed_models=bad)
         assert "allowed-models" in codes(graph.errors(graph.validate(gr)))
+
+
+def test_effort_valid_values_and_omitted():
+    for e in ("low", "medium", "high", "xhigh", "max"):
+        gr = g([task("a", effort=e)])
+        assert not [i for i in graph.errors(graph.validate(gr)) if i["code"] == "effort"], e
+    assert not [i for i in graph.errors(graph.validate(g([task("a")]))) if i["code"] == "effort"]
+
+
+def test_effort_unknown_rejected():
+    for bad in ("turbo", "", 3, ["low"]):
+        gr = g([task("a", effort=bad)])
+        assert "effort" in codes(graph.errors(graph.validate(gr))), repr(bad)
