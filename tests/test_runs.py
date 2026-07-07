@@ -124,3 +124,50 @@ def test_pending_runs_uses_results_mtime(tmp_path):
     assert rdir.stat().st_mtime > time.time() - 86400  # results/ is fresh
     pend = runs.pending_runs(proj)
     assert any(p["run_id"] == "stale" for p in pend)
+
+
+def _aged_run(tmp_path, run_id, status=None, age_days=30.0, fresh_lock=False, project="projA"):
+    """Run dir with a chosen state whose age (dir mtime + state ts) is age_days."""
+    import json
+    import os
+    import time as _time
+
+    from swarm_lib import paths, runs
+
+    rd = paths.run_dir(str(tmp_path / project), run_id)
+    rd.mkdir(parents=True, exist_ok=True)
+    (rd / "graph.json").write_text('{"version": 1, "tasks": []}')
+    old = _time.time() - age_days * 86400
+    if status is not None:
+        (rd / "run-state.json").write_text(json.dumps({"status": status, "ts": old}))
+    if fresh_lock:
+        (rd / "resume.lock").write_text(json.dumps({"owner": "x", "ts": _time.time()}))
+    os.utime(rd, (old, old))
+    return rd
+
+
+def test_gc_candidates_selects_only_old_terminal_unlocked(tmp_path, swarm_home):
+    from swarm_lib import runs
+
+    keep_young = _aged_run(tmp_path, "young-completed", "completed", age_days=2)
+    take_completed = _aged_run(tmp_path, "old-completed", "completed", age_days=30)
+    take_abandoned = _aged_run(tmp_path, "old-abandoned", "abandoned", age_days=30)
+    keep_failed = _aged_run(tmp_path, "old-failed", "failed-partial", age_days=30)
+    keep_paused = _aged_run(tmp_path, "old-paused", "paused_for_budget", age_days=30)
+    keep_interrupted = _aged_run(tmp_path, "old-interrupted", None, age_days=30)
+    keep_locked = _aged_run(tmp_path, "old-locked", "completed", age_days=30, fresh_lock=True)
+
+    got = {c["run_id"] for c in runs.gc_candidates(days=14)}
+    assert got == {"old-completed", "old-abandoned"}
+
+
+def test_gc_candidates_include_failed_and_days_knobs(tmp_path, swarm_home):
+    from swarm_lib import runs
+
+    _aged_run(tmp_path, "old-failed", "failed-partial", age_days=30)
+    _aged_run(tmp_path, "older-completed", "completed", age_days=30, project="projB")
+
+    assert {c["run_id"] for c in runs.gc_candidates(days=14, include_failed=True)} == \
+        {"old-failed", "older-completed"}
+    # a huge --days keeps everything
+    assert runs.gc_candidates(days=90, include_failed=True) == []

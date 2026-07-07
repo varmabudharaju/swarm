@@ -293,3 +293,27 @@ test('no fallback recorded when the tier works first try', async () => {
   const out = await runGraph(ARGS([T('a')]), a.fn, null, null)
   assert.deepEqual(out.fallbacks, {})
 })
+
+test('validateGraph rejects unknown effort values', () => {
+  const errs = validateGraph([T('a', [], { effort: 'turbo' })], {})
+  assert.ok(errs.some(e => e.includes('unknown effort')))
+  assert.deepEqual(validateGraph([T('a', [], { effort: 'low' })], {}), [])
+})
+
+test('runGraph threads effort into spawn opts; omitted stays absent', async () => {
+  const a = okAgent()
+  await runGraph(ARGS([T('e', [], { effort: 'low' }), T('n')]), a.fn, null, null)
+  const byLabel = Object.fromEntries(a.calls.map(c => [c.opts.label, c.opts]))
+  assert.equal(byLabel['research:e'].effort, 'low')
+  assert.equal('effort' in byLabel['research:n'], false)
+})
+
+test('effort survives the model-fallback retry', async () => {
+  const calls = []
+  const fn = async (prompt, opts) => { calls.push(opts); return calls.length < 2 ? null : { summary: 'ok' } }
+  await runGraph(ARGS([T('e', [], { effort: 'high', max_retries: 1 })]), fn, null, null)
+  assert.equal(calls.length, 2)
+  assert.equal(calls[0].effort, 'high')
+  assert.equal(calls[1].effort, 'high')      // fallback drops model, never effort
+  assert.equal('model' in calls[1], false)   // sanity: fallback did drop the model
+})

@@ -26,6 +26,7 @@ you the expected value).
       "agent_type": "swarm-reader",
       "isolation": null,
       "model": "sonnet",
+      "effort": null,
       "schema": {
         "type": "object",
         "properties": {
@@ -55,7 +56,7 @@ Implement-task schema must add: branch, worktree_path, files_touched, commits.
 
 Graph-level `allowed_models` (optional) is the run's model policy, chosen by
 the user at launch: `economy` = haiku|sonnet|opus (default), `duo` =
-sonnet|opus, `premium` = +fable. It is folded into graph_hash, enforced by
+sonnet|opus, `premium` = haiku|sonnet|opus|fable. It is folded into graph_hash, enforced by
 validation (every explicit task model must be inside it), and the executor
 clamps type-defaults into it (nearest allowed tier above, else below).
 Omitted -> all four models allowed (pre-ladder graphs keep their hashes).
@@ -76,3 +77,12 @@ inherit), clamped into `allowed_models` and then capped at the launching
 session's tier (`session_model`) — the session cap wins. Explicit values are
 never clamped or capped. If a tier fails every retry, the final retry re-runs
 on the session model and the run report lists it under `fallbacks`.
+
+## Effort tiers
+
+Optional per-task `effort`: one of `low | medium | high | xhigh | max` — the
+second token-economy lever, orthogonal to `model` (it survives the model
+fallback retry). Omitted -> the worker inherits the session's effort. Set
+`low` on mechanical/haiku-grade tasks and tightly bounded scans; omit for
+judgment, synthesis, and anything feeding implement tasks. Unknown values are
+rejected at validation (`effort` error).

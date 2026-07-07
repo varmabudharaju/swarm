@@ -55,6 +55,8 @@ SubagentStop hook automatically - workers never manage their own persistence.
    retry economics. Mechanical checks -> haiku; bounded scans/verifies ->
    sonnet; real coding -> opus; judgment/synthesis -> omit (inherit, the top
    of your ladder). Defaults are a safety net, not a reason to skip the decision.
+   Pair with `effort` (see graph-format.md "Effort tiers"): `low` on
+   mechanical tasks and tight scans; omit elsewhere.
 5. **Packets**: write one `packets/<id>.md` per task per
    `references/packet-guide.md`. Self-containment test: could a stranger with
    only this packet + prompt do the work? If not, the packet is incomplete.

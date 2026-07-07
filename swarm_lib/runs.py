@@ -73,6 +73,37 @@ def release_lock(run_dir) -> None:
     lock_path(run_dir).unlink(missing_ok=True)
 
 
+def gc_candidates(days=14, include_failed=False) -> list:
+    """Run dirs safe to reclaim: terminal state (completed/abandoned, plus
+    failed-partial only when include_failed), older than `days`, and not
+    holding a fresh resume lock. Resumable states (paused_for_budget, missing
+    run-state) are never candidates."""
+    out = []
+    root = paths.home() / "runs"
+    if not root.is_dir():
+        return out
+    terminal = {"completed", "abandoned"} | ({"failed-partial"} if include_failed else set())
+    now = time.time()
+    for proj in sorted(root.iterdir()):
+        if not proj.is_dir():
+            continue
+        for d in sorted(proj.iterdir()):
+            if not d.is_dir() or not (d / "graph.json").exists():
+                continue
+            st = read_state(d) or {}
+            if st.get("status") not in terminal:
+                continue
+            lock = paths.read_json(lock_path(d))
+            if lock and now - lock.get("ts", 0) < LOCK_STALE_HOURS * 3600:
+                continue
+            age = (now - max(d.stat().st_mtime, st.get("ts", 0))) / 86400
+            if age <= days:
+                continue
+            out.append({"run_dir": str(d), "run_id": d.name, "project": proj.name,
+                        "status": st["status"], "age_days": round(age, 1)})
+    return out
+
+
 def pending_runs(project) -> list:
     """Runs worth nagging about: interrupted (no run-state) or paused_for_budget,
     younger than NAG_MAX_AGE_DAYS."""

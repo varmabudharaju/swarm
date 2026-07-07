@@ -6,6 +6,7 @@ export const FLOOR_TOKENS = 20000
 const BUDGET_NULL = { __budget_null: true }
 
 export const LADDER = ['haiku', 'sonnet', 'opus', 'fable']
+export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
 export const TYPE_MODEL = {
   research: 'sonnet', review: 'sonnet', verify: 'sonnet',
   implement: 'opus', integrate: 'opus',
@@ -54,6 +55,7 @@ export function validateGraph(tasks, completed, allowedModels) {
     else if (t.model && allowedModels && allowedModels.length && !allowedModels.includes(t.model)) {
       errors.push(`${t.id}: model ${t.model} not in allowed_models [${allowedModels.join(', ')}]`)
     }
+    if (t.effort && !EFFORTS.includes(t.effort)) errors.push(`${t.id}: unknown effort ${t.effort}`)
   }
   for (const t of tasks) {
     const s = ((t.schema || {}).properties || {}).summary || {}
@@ -135,6 +137,7 @@ export async function runGraph(argsObj, agentFn, logFn, budget) {
           ...(t.agent_type ? { agentType: t.agent_type } : {}),
           ...(t.isolation ? { isolation: t.isolation } : {}),
           ...(model ? { model } : {}),
+          ...(t.effort ? { effort: t.effort } : {}), // orthogonal to model fallback: kept on every retry
         })
       } catch (e) {
         if (logFn) logFn(`swarm: ${t.id} threw: ${e && e.message ? e.message : e}`)
