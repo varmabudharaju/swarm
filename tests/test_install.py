@@ -346,3 +346,19 @@ def test_skill_copy_failure_preserves_existing_skill(tmp_path, monkeypatch):
         pass
     assert (skill / "SKILL.md").exists()               # old skill dir survived
     assert (skill / "SENTINEL").read_text() == "keep-me"
+
+
+# --- Group 5: workflow write-if-changed, the overwrite branch (finding 7) ---
+
+
+def test_install_workflow_overwrites_stale_content(tmp_path):
+    """Write-if-changed must OVERWRITE a stale/different workflow file with the
+    freshly generated content - the previously untested changed branch (finding 7)."""
+    cd = claude_dir(tmp_path)
+    wf = cd / "workflows" / "swarm-run.js"
+    wf.parent.mkdir(parents=True, exist_ok=True)
+    wf.write_text("// stale outdated workflow\n")
+    install.install_workflow(cd)
+    content = wf.read_text()
+    assert content == install.generate_workflow()  # rewritten with fresh content
+    assert "stale outdated workflow" not in content

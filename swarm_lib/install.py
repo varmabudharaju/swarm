@@ -79,16 +79,11 @@ def _require_assets() -> None:
         )
 
 
-def _has_marker(entries) -> bool:
-    return any(HOOK_MARKER in (h.get("command") or "")
-               for e in entries for h in (e.get("hooks") or []))
-
-
 def _plugin_installed(cd: Path) -> bool:
     """True if the swarm Claude Code plugin is installed under <claude_dir>/plugins.
-    The plugin ships the checkpoint/nag hooks natively via hooks.json (which
-    _has_marker never scans), so settings.json must not also register them or
-    they would double-fire."""
+    The plugin ships the checkpoint/nag hooks natively via hooks.json (which the
+    settings.json marker scan never sees), so settings.json must not also register
+    them or they would double-fire."""
     plugins = cd / "plugins"
     if not plugins.is_dir():
         return False
