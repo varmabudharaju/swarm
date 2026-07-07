@@ -7,6 +7,7 @@ const BUDGET_NULL = { __budget_null: true }
 
 export const LADDER = ['haiku', 'sonnet', 'opus', 'fable']
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+export const TYPES = ['research', 'review', 'implement', 'verify', 'integrate', 'synthesize']
 export const TYPE_MODEL = {
   research: 'sonnet', review: 'sonnet', verify: 'sonnet',
   implement: 'opus', integrate: 'opus',
@@ -37,6 +38,27 @@ export function effectiveModel(t, sessionModel, allowedModels) {
 
 export function validateGraph(tasks, completed, allowedModels) {
   const errors = []
+  // Model-policy shape check — mirrors swarm_lib/graph.py. Absent policy
+  // (null/undefined) means "no policy"; an explicit value must be a non-empty
+  // array of distinct known model names. amOk gates the per-task policy check
+  // below, so a malformed policy is reported once here rather than as bogus
+  // per-task violations.
+  const amProvided = allowedModels != null
+  let amOk = !amProvided
+  if (amProvided) {
+    if (!Array.isArray(allowedModels) || !allowedModels.length) {
+      errors.push('allowed_models must be a non-empty list')
+    } else if (!allowedModels.every(m => typeof m === 'string')) {
+      errors.push('allowed_models entries must all be strings')
+    } else if (new Set(allowedModels).size !== allowedModels.length) {
+      errors.push('allowed_models contains duplicates')
+    } else if (allowedModels.some(m => !LADDER.includes(m))) {
+      const bad = allowedModels.filter(m => !LADDER.includes(m))
+      errors.push(`unknown model(s) in allowed_models: ${bad.join(', ')} (use haiku|sonnet|opus|fable)`)
+    } else {
+      amOk = true
+    }
+  }
   const ids = new Set()
   for (const t of tasks) {
     if (ids.has(t.id)) errors.push(`duplicate id ${t.id}`)
@@ -51,8 +73,9 @@ export function validateGraph(tasks, completed, allowedModels) {
     if (!/^[A-Za-z0-9_.-]+$/.test(t.id || '')) errors.push(`invalid task id ${JSON.stringify(t.id)}`)
   }
   for (const t of tasks) {
+    if (!TYPES.includes(t.type)) errors.push(`${t.id}: unknown type ${t.type}`)
     if (t.model && !LADDER.includes(t.model)) errors.push(`${t.id}: unknown model ${t.model}`)
-    else if (t.model && allowedModels && allowedModels.length && !allowedModels.includes(t.model)) {
+    else if (t.model && amOk && amProvided && !allowedModels.includes(t.model)) {
       errors.push(`${t.id}: model ${t.model} not in allowed_models [${allowedModels.join(', ')}]`)
     }
     if (t.effort && !EFFORTS.includes(t.effort)) errors.push(`${t.id}: unknown effort ${t.effort}`)

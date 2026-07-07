@@ -317,3 +317,42 @@ test('effort survives the model-fallback retry', async () => {
   assert.equal(calls[1].effort, 'high')      // fallback drops model, never effort
   assert.equal('model' in calls[1], false)   // sanity: fallback did drop the model
 })
+
+test('validateGraph enforces allowed_models shape (mirrors Python)', () => {
+  const t = [T('a')]
+  assert.ok(validateGraph(t, {}, []).some(e => e.includes('allowed_models')))              // empty list
+  assert.ok(validateGraph(t, {}, ['haiku', 'haiku']).some(e => e.includes('allowed_models'))) // duplicate
+  assert.ok(validateGraph(t, {}, ['gpt5']).some(e => e.includes('allowed_models')))         // unknown name
+  assert.ok(validateGraph(t, {}, 'sonnet').some(e => e.includes('allowed_models')))          // non-array
+  assert.deepEqual(validateGraph(t, {}, ['sonnet', 'opus']), [])                             // valid list passes
+  assert.deepEqual(validateGraph(t, {}), [])                                                 // no policy still passes
+})
+
+test('validateGraph flags an unknown task type (mirrors Python)', () => {
+  const errs = validateGraph([T('a', [], { type: 'bogus-type' })], {})
+  assert.ok(errs.some(e => e.includes('a') && e.includes('unknown type')))
+  for (const ty of ['research', 'review', 'implement', 'verify', 'integrate', 'synthesize']) {
+    assert.deepEqual(validateGraph([T('a', [], { type: ty })], {}), [], ty)
+  }
+})
+
+test('validateGraph and effectiveModel accept a premium fable policy', () => {
+  const t = [T('a', [], { model: 'fable' })]
+  assert.deepEqual(validateGraph(t, {}, ['haiku', 'sonnet', 'opus', 'fable']), [])
+  assert.equal(effectiveModel(t[0], null, ['haiku', 'sonnet', 'opus', 'fable']), 'fable')
+})
+
+test('exhausted retry under a restrictive ladder still falls back to session inherit', async () => {
+  const calls = []
+  const fn = async (prompt, opts) => {
+    calls.push(opts.model ?? 'inherit')
+    return opts.model ? null : { summary: 'ok on inherit' } // the pinned tier is "unavailable"
+  }
+  const logs = []
+  const out = await runGraph(
+    ARGS([T('a')], {}, { allowed_models: ['sonnet', 'opus'] }), fn, (m) => logs.push(m), null)
+  assert.deepEqual(calls, ['sonnet', 'inherit'])          // last attempt carries no model option
+  assert.deepEqual(out.fallbacks, { a: 'sonnet->inherit' })
+  assert.ok('a' in out.completed)
+  assert.ok(logs.some(l => l.includes("model 'sonnet' unavailable or failing")))
+})
