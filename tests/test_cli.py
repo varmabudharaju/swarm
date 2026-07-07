@@ -239,3 +239,30 @@ def test_args_passes_effort_through(tmp_path, swarm_home, capsys):
     by_id = {t["id"]: t for t in out["tasks"]}
     assert by_id["a"]["effort"] == "low"
     assert by_id["b"]["effort"] is None
+
+
+def test_gc_lists_by_default_and_deletes_with_flag(tmp_path, swarm_home, capsys):
+    from pathlib import Path
+
+    from swarm_lib import cli
+    from test_runs import _aged_run
+
+    victim = _aged_run(tmp_path, "old-completed", "completed", age_days=30)
+    survivor = _aged_run(tmp_path, "old-paused", "paused_for_budget", age_days=30)
+
+    # default: dry-run - lists, deletes nothing
+    assert cli.main(["gc"]) == 0
+    out = capsys.readouterr().out
+    assert "would delete" in out and "old-completed" in out and "--delete" in out
+    assert victim.exists()
+
+    # --delete: removes the candidate, never the resumable run
+    assert cli.main(["gc", "--delete"]) == 0
+    out = capsys.readouterr().out
+    assert "deleting" in out
+    assert not victim.exists()
+    assert survivor.exists()
+
+    # nothing left eligible
+    assert cli.main(["gc"]) == 0
+    assert "nothing eligible" in capsys.readouterr().out

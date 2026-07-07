@@ -129,6 +129,25 @@ def cmd_abandon(a) -> int:
     return 0
 
 
+def cmd_gc(a) -> int:
+    import shutil
+
+    cands = runs.gc_candidates(days=a.days, include_failed=a.include_failed)
+    if not cands:
+        print("gc: nothing eligible")
+        return 0
+    for c in cands:
+        print(f"{'deleting' if a.delete else 'would delete'}: {c['run_dir']} "
+              f"({c['status']}, {c['age_days']}d old)")
+        if a.delete:
+            shutil.rmtree(c["run_dir"])
+    if a.delete:
+        print(f"gc: removed {len(cands)} run(s)")
+    else:
+        print(f"gc: {len(cands)} candidate(s) - re-run with --delete to remove")
+    return 0
+
+
 def cmd_install_workflow(a) -> int:
     install_mod.install_workflow(a.claude_dir)
     return 0
@@ -186,6 +205,12 @@ def main(argv=None) -> int:
     p = sub.add_parser("abandon")
     p.add_argument("run_dir")
     p.set_defaults(fn=cmd_abandon)
+
+    p = sub.add_parser("gc")  # reclaim old terminal runs; dry-run unless --delete
+    p.add_argument("--days", type=int, default=14)
+    p.add_argument("--include-failed", action="store_true")
+    p.add_argument("--delete", action="store_true")
+    p.set_defaults(fn=cmd_gc)
 
     for name, fn in (("install", cmd_install), ("uninstall", cmd_uninstall)):
         p = sub.add_parser(name)
