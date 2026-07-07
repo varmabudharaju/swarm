@@ -74,11 +74,21 @@ sequenceDiagram
 
 ## Right-sized brains (model tiering)
 
-Every job in the graph carries a model tier — chosen by the foreman per job, weighing quality stakes, ambiguity, complexity, and token cost. **Lowest tier that fits:**
+Every run picks a **model ladder** first — the foreman asks once at launch (or you name it in the goal):
+
+| Ladder | Models | Top tier (judgment/synthesis) |
+|---|---|---|
+| `economy` (default) | haiku, sonnet, opus | opus |
+| `duo` | sonnet, opus | opus |
+| `premium` | haiku, sonnet, opus, fable | fable |
+
+The choice is written into `graph.json` as `allowed_models`, folded into the tamper-evident hash, enforced by validation, and honored on resume. Run your main (foreman) session on **Opus with extended thinking** — decomposition and synthesis inherit it.
+
+Within the ladder, every job carries a model tier — chosen by the foreman per job, weighing quality stakes, ambiguity, complexity, and token cost. **Lowest tier that fits:**
 
 | Tier | Right for |
 |---|---|
-| top model (inherit) | decomposition, ambiguous goals, final synthesis |
+| top of your ladder (inherit) | decomposition, ambiguous goals, final synthesis |
 | `opus` | real coding: implementing, debugging, refactoring |
 | `sonnet` | clear-goal bounded work: scans, reviews, adversarial verification |
 | `haiku` | mechanical checks, extraction, formatting |
@@ -97,9 +107,9 @@ flowchart TD
 
 Three safety layers behind the judgment call:
 
-- **Safety-net defaults** — untagged jobs get a sensible tier by type, capped at the launching session's own tier (an opus session never silently escalates to the premium model).
-- **Failure fallback** — if a tier is unavailable or keeps failing, the final retry runs on the session model (always available), and the run report names every job that didn't run on its intended tier (`design-api: fable->inherit`). Loud, never silent.
-- **Validation** — unknown model names are rejected before launch.
+- **Safety-net defaults** — untagged jobs get a sensible tier by type, clamped into the run's ladder and capped at the launching session's own tier (an opus session never silently escalates above itself).
+- **Failure fallback** — if a tier is unavailable or keeps failing, the final retry runs on the session model (always available), and the run report names every job that didn't run on its intended tier (`design-api: opus->inherit`). Loud, never silent.
+- **Validation** — unknown model names, malformed ladders, and jobs tagged outside the run's ladder are all rejected before launch.
 
 What happens when a tier misbehaves:
 
