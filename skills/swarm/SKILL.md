@@ -46,7 +46,9 @@ SubagentStop hook automatically - workers never manage their own persistence.
 4. **Decompose** into `graph.json` per `references/graph-format.md`, following a
    shape from `references/shapes.md`. Maximize width honestly: every task that
    CAN be independent IS independent; deps are data dependencies, never phases.
-   Target width near 16 (the concurrency cap); going wider buys queueing, not speed.
+   The scheduler itself imposes no width cap; going wider than the Workflow
+   runtime's concurrent-agent slots (~16) buys queueing, not speed, so there's
+   no throughput reason to split narrower than the true dependency structure.
    Verify tiers: one verifier per 4-6 sibling finding-tasks; per-task verify only
    for results feeding implement tasks.
    Assign `model` explicitly per task from the chosen ladder (lowest tier that

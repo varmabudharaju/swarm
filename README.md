@@ -156,6 +156,8 @@ swarm install        # hooks into settings.json; copies skill/workflow/agents
 
 Then in Claude Code: `/swarm <goal>` — or `/swarm resume` after an interruption.
 
+Both paths need `python3` on your `PATH` (the plugin's shim falls back to `python` if `python3` isn't found).
+
 ## Pieces
 
 | Piece | Where it lands | Role |
@@ -163,7 +165,7 @@ Then in Claude Code: `/swarm <goal>` — or `/swarm resume` after an interruptio
 | `swarm` skill | `~/.claude/skills/swarm/` | decomposition + resume protocol |
 | `swarm-run` workflow | `~/.claude/workflows/swarm-run.js` | pure DAG scheduler (generated) |
 | worker agents | `~/.claude/agents/swarm-*.md` | least-privilege reader/verifier/implementer, tiered models |
-| hooks | settings.json (SubagentStop, SessionStart) | checkpoints + resume nag |
+| hooks | settings.json (SubagentStop, SessionStart); plugin installs get the same two natively from `hooks/hooks.json` via `${CLAUDE_PLUGIN_ROOT}`, without touching settings.json | checkpoints + resume nag |
 | run state | `~/.claude/swarm/runs/<project>/<run-id>/` | graph, packets, results, state |
 
 ## CLI
@@ -176,6 +178,7 @@ swarm finish <run-dir> --status completed|paused_for_budget|failed-partial
 swarm abandon <run-dir>
 swarm gc [--days N] [--include-failed] [--delete]   # reclaim old finished runs (dry-run by default)
 swarm install / swarm uninstall
+swarm install-workflow [--claude-dir <dir>]   # plugin bootstrap: writes only the workflow file
 ```
 
 ## Guardrails
@@ -189,7 +192,7 @@ Worker activity is audited machine-wide by [agent-pd](https://github.com/varmabu
 
 ## Managed paths
 
-`swarm install` owns these locations and will overwrite/delete them on reinstall/uninstall — do not hand-edit: `~/.claude/skills/swarm/`, `~/.claude/agents/swarm-{reader,verifier,implementer}.md`, `~/.claude/workflows/swarm-run.js` (generated; edit sources in this repo).
+`swarm install` owns these locations and will overwrite/delete them on reinstall/uninstall — do not hand-edit: `~/.claude/skills/swarm/`, `~/.claude/agents/swarm-{reader,verifier,implementer}.md`, `~/.claude/workflows/swarm-run.js` (generated; edit sources in this repo). Also managed: `~/.claude/settings.json.bak-swarm`, a one-time backup of your pre-swarm settings.json written at first install and removed on uninstall.
 
 ## Under the hood
 
@@ -205,9 +208,9 @@ flowchart TB
         WF["swarm-run.js<br/>pure DAG scheduler"]
     end
     subgraph team ["Worker subagents - parallel"]
-        W1["swarm-reader<br/>sonnet"]
-        W2["swarm-verifier<br/>sonnet"]
-        W3["swarm-implementer<br/>opus, isolated worktree"]
+        W1["swarm-reader<br/>default sonnet - per-task model wins"]
+        W2["swarm-verifier<br/>default sonnet - per-task model wins"]
+        W3["swarm-implementer<br/>default opus - per-task model wins, isolated worktree"]
     end
     subgraph rundir ["Durable run state on disk"]
         GJ["graph.json - content-hashed"]
@@ -271,7 +274,7 @@ swarm_lib/        Python: CLI, graph validation/hashing, checkpoint hook,
                   run state, marker protocol, reversible installer
 workflows/        run_graph.mjs - pure DAG scheduler (no runtime deps,
                   Node-testable, embedded into the installed workflow)
-skill/            the /swarm skill + graph-format / packet / shape references
+skills/swarm/     the /swarm skill + graph-format / packet / shape references
 agents/           swarm-reader, swarm-verifier, swarm-implementer definitions
 tests/            pytest suite + node:test scheduler suite
 ```
