@@ -41,9 +41,19 @@ you the expected value).
 }
 ```
 
-Rules enforced by `swarm validate` (errors block launch): version 1; unique ids;
-known types; deps exist; no cycles; fan-in <= 8; every schema has
-summary:string maxLength<=2000; non-empty prompts; graph_hash matches.
+`budget_tokens` is reserved and currently ignored: neither `swarm args` nor
+`swarm validate` reads it. The token budget that actually gates a run is the
+Workflow runtime's own session budget, enforced by `swarm-run` at launch time.
+Leave it `null` in graph.json until it is wired up.
+
+Rules enforced by `swarm validate` (errors block launch): version 1; unique ids
+(`dup-id`); ids match `[A-Za-z0-9_.-]+` (`id-charset`); known types; deps exist
+(`dangling`); no cycles; fan-in <= 8; every schema has summary:string
+maxLength<=2000; non-empty prompts; graph_hash matches; `allowed_models` is a
+well-formed, deduped list of known models (`allowed-models`); every task
+`model` is a known model (`model`) and inside `allowed_models` when set
+(`model-policy`); every task `effort` is one of low|medium|high|xhigh|max
+(`effort`).
 Warnings: >25 tasks, median prompt <400 chars, verify ratio >30%, barrier smell.
 
 Task types: research, review (read-only; swarm-reader), verify (swarm-verifier),
