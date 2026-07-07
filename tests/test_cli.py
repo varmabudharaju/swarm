@@ -188,6 +188,35 @@ def test_args_includes_model_and_session_model(tmp_path, swarm_home, capsys):
     assert by_id["b"]["model"] is None
 
 
+def test_args_passes_allowed_models_through(tmp_path, swarm_home, capsys):
+    import json
+    from conftest import make_run, task
+    from swarm_lib import cli, graph as g, paths
+
+    rd = make_run(tmp_path, tasks=[task("a", model="sonnet")])
+    gr = paths.read_json(rd / "graph.json")
+    gr["allowed_models"] = ["sonnet", "opus"]
+    gr["graph_hash"] = g.compute_hash(gr)
+    paths.write_json_atomic(rd / "graph.json", gr)
+    assert cli.main(["args", str(rd / "graph.json"), "--session-model", "opus"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["allowed_models"] == ["sonnet", "opus"]
+
+
+def test_args_allowed_models_null_when_absent(tmp_path, swarm_home, capsys):
+    import json
+    from conftest import make_run, task
+    from swarm_lib import cli, graph as g, paths
+
+    rd = make_run(tmp_path, tasks=[task("a")])
+    gr = paths.read_json(rd / "graph.json")
+    gr["graph_hash"] = g.compute_hash(gr)
+    paths.write_json_atomic(rd / "graph.json", gr)
+    assert cli.main(["args", str(rd / "graph.json")]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["allowed_models"] is None
+
+
 def test_args_rejects_bad_session_model(tmp_path, swarm_home):
     import pytest
     from swarm_lib import cli

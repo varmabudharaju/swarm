@@ -14,7 +14,13 @@ SUMMARY_MAX = 2000
 
 
 def compute_hash(graph) -> str:
-    blob = json.dumps(graph.get("tasks", []), sort_keys=True).encode()
+    payload = graph.get("tasks", [])
+    if graph.get("allowed_models") is not None:
+        # Fold the model policy into the hash so editing it after results
+        # exist is caught. Absent policy keeps the legacy tasks-only blob,
+        # so pre-ladder runs keep their hashes and stay resumable.
+        payload = {"allowed_models": graph["allowed_models"], "tasks": payload}
+    blob = json.dumps(payload, sort_keys=True).encode()
     return hashlib.sha256(blob).hexdigest()[:16]
 
 
@@ -30,6 +36,20 @@ def validate(graph) -> list:
     if graph.get("version") != 1:
         err("version", "graph version must be 1")
     tasks = graph.get("tasks") or []
+    am = graph.get("allowed_models")
+    am_ok = am is None
+    if am is not None:
+        if not isinstance(am, list) or not am:
+            err("allowed-models", "allowed_models must be a non-empty list")
+        elif len(set(am)) != len(am):
+            err("allowed-models", "allowed_models contains duplicates")
+        elif any(m not in MODELS for m in am):
+            bad = [m for m in am if m not in MODELS]
+            err("allowed-models",
+                f"unknown model(s) in allowed_models: {', '.join(map(str, bad))} "
+                f"(use haiku|sonnet|opus|fable)")
+        else:
+            am_ok = True
     ids = [t.get("id") for t in tasks]
     if len(ids) != len(set(ids)):
         err("dup-id", "duplicate task ids")
@@ -44,6 +64,10 @@ def validate(graph) -> list:
             err("type", f"{tid}: unknown type {t.get('type')}")
         if t.get("model") is not None and t["model"] not in MODELS:
             err("model", f"{tid}: unknown model {t['model']} (use haiku|sonnet|opus|fable)")
+        if (t.get("model") in MODELS and am_ok and am is not None
+                and t["model"] not in am):
+            err("model-policy",
+                f"{tid}: model {t['model']} not in allowed_models {am}")
         for d in t.get("deps", []):
             if d not in idset:
                 err("dangling", f"{tid}: dep {d} does not exist")

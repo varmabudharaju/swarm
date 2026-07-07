@@ -114,3 +114,54 @@ def test_model_omitted_is_valid():
 
     issues = g.validate({"version": 1, "tasks": [task("a")]})
     assert not [i for i in g.errors(issues) if i["code"] == "model"]
+
+
+def test_allowed_models_valid_subset_ok():
+    gr = g([task("a", model="sonnet")], allowed_models=["sonnet", "opus"])
+    assert graph.errors(graph.validate(gr)) == []
+
+
+def test_allowed_models_rejects_unknown_empty_nonlist_dupes():
+    for bad, why in (
+        (["sonnet", "gpt5"], "unknown"),
+        ([], "empty"),
+        ("sonnet", "non-list"),
+        (["sonnet", "sonnet"], "duplicate"),
+    ):
+        gr = g([task("a")], allowed_models=bad)
+        assert "allowed-models" in codes(graph.errors(graph.validate(gr))), why
+
+
+def test_model_policy_task_model_must_be_in_allowed():
+    gr = g([task("a", model="fable")], allowed_models=["sonnet", "opus"])
+    assert "model-policy" in codes(graph.errors(graph.validate(gr)))
+    # in-set explicit model is fine
+    ok = g([task("a", model="opus")], allowed_models=["sonnet", "opus"])
+    assert "model-policy" not in codes(graph.errors(graph.validate(ok)))
+
+
+def test_model_policy_skipped_when_allowed_models_malformed():
+    """A malformed allowed_models reports allowed-models, not a bogus model-policy."""
+    gr = g([task("a", model="sonnet")], allowed_models="sonnet")
+    cs = codes(graph.errors(graph.validate(gr)))
+    assert "allowed-models" in cs and "model-policy" not in cs
+
+
+def test_hash_unchanged_when_allowed_models_absent():
+    """Backward compat: pre-ladder graphs must keep their existing hashes."""
+    tasks = [task("a"), task("b", deps=["a"])]
+    legacy = {"version": 1, "tasks": tasks}
+    assert graph.compute_hash(legacy) == graph.compute_hash({"version": 1, "tasks": tasks, "other": 1})
+
+
+def test_hash_covers_allowed_models_when_present():
+    tasks = [task("a")]
+    h_economy = graph.compute_hash({"tasks": tasks, "allowed_models": ["haiku", "sonnet", "opus"]})
+    h_duo = graph.compute_hash({"tasks": tasks, "allowed_models": ["sonnet", "opus"]})
+    h_legacy = graph.compute_hash({"tasks": tasks})
+    assert h_economy != h_duo
+    assert h_economy != h_legacy
+    # and validate() catches post-hoc edits to allowed_models
+    gr = g([task("a")], allowed_models=["sonnet", "opus"])
+    gr["allowed_models"] = ["haiku", "sonnet", "opus"]
+    assert "hash" in codes(graph.errors(graph.validate(gr)))

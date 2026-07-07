@@ -1,0 +1,28 @@
+{
+  "schema_version": "1",
+  "generated_at": "2026-07-07T19:46:52Z",
+  "config": ".shotlist.yaml",
+  "shot_count": 2,
+  "shots": [
+    {
+      "index": 1,
+      "name": "ladder-rejects-out-of-policy",
+      "kind": "session",
+      "alt": "swarm validate rejects a fable-tagged task in a duo (sonnet+opus) run with error[model-policy]",
+      "file": "01-ladder-rejects-out-of-policy.png",
+      "bytes": 67148,
+      "sha256": "a7ce4b29bc9c76f5a135eb3fd4fdcb0718ca387ae174f8b1234f86cc42b29282",
+      "deterministic": false
+    },
+    {
+      "index": 2,
+      "name": "ladder-accepts-and-emits",
+      "kind": "session",
+      "alt": "the corrected opus-tagged graph validates and swarm args emits allowed_models to the executor",
+      "file": "02-ladder-accepts-and-emits.png",
+      "bytes": 74204,
+      "sha256": "57fabe0084ed49808e6a883534dc1f6ea59d41cbbf6ad72acce5b3dd9b6301f7",
+      "deterministic": false
+    }
+  ]
+}

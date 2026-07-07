@@ -59,3 +59,20 @@ Highlights: ledger partial-line read can permanently lose records; negative
 offloaded dict tool-responses are saved as one JSON line (Read offset/limit
 can't navigate); uninstall can drop a co-resident hook entry. These feed tend
 v0.2.
+
+## Per-run model ladders (2026-07-07, branch `feat/model-ladders`)
+
+Suites: `python3 -m pytest -q` → **87 passed** (68 Python + 19→24 Node scheduler
+tests incl. 11 new: allowed_models validation/hash coverage, args passthrough,
+clampToLadder, policy enforcement in validateGraph/runGraph).
+
+End-to-end through the installed CLI, captured as real Terminal screenshots
+(`shotlist run`, fixtures in `docs/examples/ladder-duo/`):
+
+1. **Policy enforced before launch** — a `fable`-tagged task in a
+   `duo` (sonnet+opus) run is rejected with `error[model-policy]`:
+   ![policy rejection](screenshots/01-ladder-rejects-out-of-policy.png)
+2. **Happy path + executor handoff** — the corrected `opus`-tagged graph
+   validates (`ok: 1 tasks, hash a261b8731b54fb9c` — note the hash covers
+   `allowed_models`) and `swarm args` emits the policy to the workflow:
+   ![accepts and emits](screenshots/02-ladder-accepts-and-emits.png)
