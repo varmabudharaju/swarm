@@ -198,3 +198,59 @@ def test_install_fails_loud_when_assets_missing(tmp_path, monkeypatch):
     except install.SettingsError as e:
         assert "installation assets not found" in str(e)
     assert not sp.exists()  # settings.json never created -> no half-install
+
+
+# --- Group 2: uninstall correctness (findings 1, 5, 8) ---
+
+
+def test_backup_written_once_and_removed_on_uninstall(tmp_path):
+    """The .bak-swarm backup must hold the true pre-install settings mid-cycle
+    and be deleted on uninstall - never overwritten from swarm-modified state
+    (finding 1)."""
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(EXISTING))
+    cd = claude_dir(tmp_path)
+    backup = tmp_path / "settings.json.bak-swarm"
+
+    install.install(sp, cd)
+    assert backup.exists()
+    # mid-cycle the backup equals the ORIGINAL, not the swarm-modified settings
+    assert json.loads(backup.read_text()) == EXISTING
+
+    install.uninstall(sp, cd)
+    assert not backup.exists()  # backup cleaned up on uninstall
+
+
+def test_uninstall_leaves_unrelated_empty_event_untouched(tmp_path):
+    """An unrelated event whose value is [] must survive uninstall; the change
+    flag is per-event, not shared across the loop (finding 5)."""
+    settings = {
+        "hooks": {
+            "AEvent": [{"hooks": [{"type": "command",
+                                   "command": '"/py" -m swarm_lib.hook'}]}],
+            "ZEvent": [],
+        }
+    }
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(settings))
+    cd = claude_dir(tmp_path)
+    install.uninstall(sp, cd)
+    s = json.loads(sp.read_text())
+    assert "ZEvent" in s["hooks"]      # unrelated empty event not collateral-deleted
+    assert s["hooks"]["ZEvent"] == []
+    assert "AEvent" not in s["hooks"]  # swarm-only event correctly removed
+
+
+def test_plugin_flow_uninstall_without_settings(tmp_path):
+    """Plugin-era teardown: install_workflow() then uninstall() with no prior
+    install() and no settings.json must not crash, must remove the workflow, and
+    must disturb nothing else (finding 8)."""
+    cd = claude_dir(tmp_path)
+    install.install_workflow(cd)
+    wf = cd / "workflows" / "swarm-run.js"
+    assert wf.exists()
+    sp = tmp_path / "settings.json"  # deliberately never created
+    install.uninstall(sp, cd)        # must tolerate a missing settings file
+    assert not wf.exists()                                    # workflow removed
+    assert not sp.exists()                                    # none conjured up
+    assert not (tmp_path / "settings.json.bak-swarm").exists()

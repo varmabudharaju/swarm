@@ -89,8 +89,12 @@ def _write_settings(sp: Path, settings: dict) -> None:
     mode = None
     if sp.exists():
         mode = sp.stat().st_mode
-        backup.write_text(sp.read_text(encoding="utf-8"), encoding="utf-8")
-        os.chmod(backup, mode)
+        if not backup.exists():
+            # Capture the true pre-swarm state exactly once. Writing on every
+            # call would clobber the original with already-swarm-modified
+            # content on the second write (e.g. install then uninstall).
+            backup.write_text(sp.read_text(encoding="utf-8"), encoding="utf-8")
+            os.chmod(backup, mode)
     tmp = sp.with_name(f"{sp.name}.{os.getpid()}.tmp")
     tmp.parent.mkdir(parents=True, exist_ok=True)
     tmp.write_text(json.dumps(settings, indent=2), encoding="utf-8")
@@ -141,28 +145,34 @@ def uninstall(settings_path, claude_dir) -> None:
     hooks = settings.get("hooks", {})
     changed = False
     for ev in list(hooks):
+        ev_changed = False  # per-event: an unrelated event must not be touched
         new_entries = []
         for entry in hooks[ev]:
+            original_hooks = entry.get("hooks") or []
             pruned_hooks = [
-                h for h in (entry.get("hooks") or [])
+                h for h in original_hooks
                 if HOOK_MARKER not in (h.get("command") or "")
             ]
-            if len(pruned_hooks) == len(entry.get("hooks") or []):
+            if len(pruned_hooks) == len(original_hooks):
                 # No swarm commands in this entry — keep it unchanged.
                 new_entries.append(entry)
             elif pruned_hooks:
                 # Swarm commands removed but other commands remain — keep trimmed entry.
-                changed = True
+                ev_changed = True
                 new_entries.append({**entry, "hooks": pruned_hooks})
             else:
                 # All commands in this entry were swarm commands — drop the entry.
-                changed = True
-        if changed or len(new_entries) != len(hooks[ev]):
-            hooks[ev] = new_entries
-            if not hooks[ev]:
+                ev_changed = True
+        if ev_changed:
+            changed = True
+            if new_entries:
+                hooks[ev] = new_entries
+            else:
                 del hooks[ev]
     if changed:
         _write_settings(sp, settings)
+    # Remove swarm's own backup of the user's pre-install settings.
+    sp.with_name(sp.name + ".bak-swarm").unlink(missing_ok=True)
     (cd / "workflows" / "swarm-run.js").unlink(missing_ok=True)
     shutil.rmtree(cd / "skills" / "swarm", ignore_errors=True)
     for name in AGENT_FILES:
