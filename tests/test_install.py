@@ -153,3 +153,212 @@ def test_install_workflow_is_idempotent(tmp_path):
     first_mtime = wf.stat().st_mtime_ns
     install.install_workflow(cd)
     assert wf.stat().st_mtime_ns == first_mtime  # unchanged content -> no write
+
+
+# --- Group 1: settings hardening (findings 3, 6) ---
+
+
+def test_non_dict_settings_list_refused(tmp_path):
+    """A JSON array at the top level must raise SettingsError, not crash later
+    or be silently overwritten (finding 3)."""
+    sp = tmp_path / "settings.json"
+    sp.write_text("[1, 2, 3]")
+    before = sp.read_text()
+    try:
+        install.install(sp, claude_dir(tmp_path))
+        assert False, "should have raised"
+    except install.SettingsError:
+        pass
+    assert sp.read_text() == before  # untouched, not wiped
+
+
+def test_empty_list_settings_refused(tmp_path):
+    """`[]` is falsy and used to be coerced to `{}` then overwritten; it must
+    raise instead (finding 3)."""
+    sp = tmp_path / "settings.json"
+    sp.write_text("[]")
+    try:
+        install.install(sp, claude_dir(tmp_path))
+        assert False, "should have raised"
+    except install.SettingsError:
+        pass
+    assert sp.read_text() == "[]"  # untouched, not silently wiped
+
+
+def test_install_fails_loud_when_assets_missing(tmp_path, monkeypatch):
+    """Non-editable pip installs ship only swarm_lib; install() must fail loud
+    BEFORE writing settings.json, so no half-install is left behind (finding 6)."""
+    fake_root = tmp_path / "fake_repo_root"
+    fake_root.mkdir()
+    monkeypatch.setattr(install, "repo_root", lambda: fake_root)
+    sp = tmp_path / "settings.json"
+    try:
+        install.install(sp, claude_dir(tmp_path))
+        assert False, "should have raised"
+    except install.SettingsError as e:
+        assert "installation assets not found" in str(e)
+    assert not sp.exists()  # settings.json never created -> no half-install
+
+
+# --- Group 2: uninstall correctness (findings 1, 5, 8) ---
+
+
+def test_backup_written_once_and_removed_on_uninstall(tmp_path):
+    """The .bak-swarm backup must hold the true pre-install settings mid-cycle
+    and be deleted on uninstall - never overwritten from swarm-modified state
+    (finding 1)."""
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(EXISTING))
+    cd = claude_dir(tmp_path)
+    backup = tmp_path / "settings.json.bak-swarm"
+
+    install.install(sp, cd)
+    assert backup.exists()
+    # mid-cycle the backup equals the ORIGINAL, not the swarm-modified settings
+    assert json.loads(backup.read_text()) == EXISTING
+
+    install.uninstall(sp, cd)
+    assert not backup.exists()  # backup cleaned up on uninstall
+
+
+def test_uninstall_leaves_unrelated_empty_event_untouched(tmp_path):
+    """An unrelated event whose value is [] must survive uninstall; the change
+    flag is per-event, not shared across the loop (finding 5)."""
+    settings = {
+        "hooks": {
+            "AEvent": [{"hooks": [{"type": "command",
+                                   "command": '"/py" -m swarm_lib.hook'}]}],
+            "ZEvent": [],
+        }
+    }
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(settings))
+    cd = claude_dir(tmp_path)
+    install.uninstall(sp, cd)
+    s = json.loads(sp.read_text())
+    assert "ZEvent" in s["hooks"]      # unrelated empty event not collateral-deleted
+    assert s["hooks"]["ZEvent"] == []
+    assert "AEvent" not in s["hooks"]  # swarm-only event correctly removed
+
+
+def test_plugin_flow_uninstall_without_settings(tmp_path):
+    """Plugin-era teardown: install_workflow() then uninstall() with no prior
+    install() and no settings.json must not crash, must remove the workflow, and
+    must disturb nothing else (finding 8)."""
+    cd = claude_dir(tmp_path)
+    install.install_workflow(cd)
+    wf = cd / "workflows" / "swarm-run.js"
+    assert wf.exists()
+    sp = tmp_path / "settings.json"  # deliberately never created
+    install.uninstall(sp, cd)        # must tolerate a missing settings file
+    assert not wf.exists()                                    # workflow removed
+    assert not sp.exists()                                    # none conjured up
+    assert not (tmp_path / "settings.json.bak-swarm").exists()
+
+
+# --- Group 3: install hook logic (findings 4, 9) ---
+
+
+def test_install_refreshes_stale_interpreter_hook(tmp_path):
+    """A marker entry baked with an old/broken interpreter path must be rewritten
+    to the current hook_command() on reinstall, not left stale (finding 4)."""
+    stale = {
+        "hooks": {
+            "SubagentStop": [
+                {"hooks": [{"type": "command",
+                            "command": '"/old/broken/python" -m swarm_lib.hook'}]}
+            ],
+        }
+    }
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(stale))
+    cd = claude_dir(tmp_path)
+    install.install(sp, cd)
+    s = json.loads(sp.read_text())
+    cmds = [h["command"] for e in s["hooks"]["SubagentStop"] for h in e["hooks"]]
+    assert install.hook_command() in cmds              # refreshed to current interp
+    assert "/old/broken/python" not in " ".join(cmds)  # stale command gone
+    marker_cmds = [c for c in cmds if "-m swarm_lib.hook" in c]
+    assert len(marker_cmds) == 1                        # no duplicate entry appended
+
+
+def _make_swarm_plugin(cd):
+    p = cd / "plugins" / "marketplace-x" / "swarm" / ".claude-plugin"
+    p.mkdir(parents=True, exist_ok=True)
+    (p / "plugin.json").write_text('{"name": "swarm"}')
+
+
+def test_install_skips_settings_hooks_when_plugin_present(tmp_path):
+    """With the swarm plugin installed (it registers hooks natively), install()
+    must NOT append hook entries to settings.json - but must still install the
+    skill/workflow/agents (finding 9)."""
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(EXISTING))
+    before = sp.read_text()
+    cd = claude_dir(tmp_path)
+    _make_swarm_plugin(cd)
+    install.install(sp, cd)
+    assert sp.read_text() == before  # settings.json untouched -> no double-register
+    s = json.loads(sp.read_text())
+    for ev in ("SubagentStop", "SessionStart"):
+        cmds = [h["command"] for e in s["hooks"][ev] for h in e["hooks"]]
+        assert not any("swarm_lib" in c for c in cmds)
+    assert (cd / "skills" / "swarm" / "SKILL.md").exists()
+    assert (cd / "workflows" / "swarm-run.js").exists()
+    assert (cd / "agents" / "swarm-reader.md").exists()
+
+
+def test_install_registers_hooks_when_no_plugin(tmp_path):
+    """Negative case for finding 9: absent a plugin, hooks are registered."""
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(EXISTING))
+    cd = claude_dir(tmp_path)
+    install.install(sp, cd)
+    s = json.loads(sp.read_text())
+    for ev in ("SubagentStop", "SessionStart"):
+        cmds = [h["command"] for e in s["hooks"][ev] for h in e["hooks"]]
+        assert any("-m swarm_lib.hook" in c for c in cmds)
+
+
+# --- Group 4: atomic skill replacement (finding 2) ---
+
+
+def test_skill_copy_failure_preserves_existing_skill(tmp_path, monkeypatch):
+    """A mid-copy failure while replacing skills/swarm must leave the previously
+    installed skill dir intact, not destroy it into a half-install (finding 2)."""
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(EXISTING))
+    cd = claude_dir(tmp_path)
+    install.install(sp, cd)  # first, real install populates skills/swarm
+    skill = cd / "skills" / "swarm"
+    assert (skill / "SKILL.md").exists()
+    # sentinel proves the ORIGINAL dir survived (not a freshly recreated one)
+    (skill / "SENTINEL").write_text("keep-me")
+
+    def boom(*a, **k):
+        raise RuntimeError("copytree failed mid-way")
+    monkeypatch.setattr(install.shutil, "copytree", boom)
+
+    try:
+        install.install(sp, cd)
+        assert False, "install should have propagated the copy failure"
+    except RuntimeError:
+        pass
+    assert (skill / "SKILL.md").exists()               # old skill dir survived
+    assert (skill / "SENTINEL").read_text() == "keep-me"
+
+
+# --- Group 5: workflow write-if-changed, the overwrite branch (finding 7) ---
+
+
+def test_install_workflow_overwrites_stale_content(tmp_path):
+    """Write-if-changed must OVERWRITE a stale/different workflow file with the
+    freshly generated content - the previously untested changed branch (finding 7)."""
+    cd = claude_dir(tmp_path)
+    wf = cd / "workflows" / "swarm-run.js"
+    wf.parent.mkdir(parents=True, exist_ok=True)
+    wf.write_text("// stale outdated workflow\n")
+    install.install_workflow(cd)
+    content = wf.read_text()
+    assert content == install.generate_workflow()  # rewritten with fresh content
+    assert "stale outdated workflow" not in content
