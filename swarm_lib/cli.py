@@ -74,6 +74,7 @@ def cmd_args(a) -> int:
         "results_dir": str(runs.results_dir(rd)),
         "agent_ceiling": gr.get("agent_ceiling"),
         "session_model": a.session_model,
+        "allowed_models": gr.get("allowed_models"),
         "tasks": [{
             "id": t["id"], "title": t.get("title", ""), "type": t["type"],
             "prompt": t["prompt"], "deps": t.get("deps", []),
