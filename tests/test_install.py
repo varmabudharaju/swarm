@@ -133,3 +133,23 @@ def test_uninstall_removes_only_swarm_commands_from_mixed_entry(tmp_path):
     assert any("other.tool" in c for c in cmds)
     # The swarm hook must be gone.
     assert not any("swarm_lib" in c for c in cmds)
+
+
+def test_install_workflow_only_writes_workflow(tmp_path):
+    """Plugin bootstrap: write ~/.claude/workflows/swarm-run.js, touch nothing else."""
+    cd = claude_dir(tmp_path)
+    install.install_workflow(cd)
+    wf = cd / "workflows" / "swarm-run.js"
+    assert wf.read_text().startswith("export const meta")
+    assert not (cd / "skills").exists()        # skill copy is the pip installer's job
+    assert not (tmp_path / "settings.json").exists()  # hooks come from the plugin
+
+
+def test_install_workflow_is_idempotent(tmp_path):
+    """Write-if-changed: a second call with identical content must not rewrite."""
+    cd = claude_dir(tmp_path)
+    install.install_workflow(cd)
+    wf = cd / "workflows" / "swarm-run.js"
+    first_mtime = wf.stat().st_mtime_ns
+    install.install_workflow(cd)
+    assert wf.stat().st_mtime_ns == first_mtime  # unchanged content -> no write

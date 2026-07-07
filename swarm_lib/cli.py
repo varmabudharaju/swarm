@@ -74,6 +74,7 @@ def cmd_args(a) -> int:
         "results_dir": str(runs.results_dir(rd)),
         "agent_ceiling": gr.get("agent_ceiling"),
         "session_model": a.session_model,
+        "allowed_models": gr.get("allowed_models"),
         "tasks": [{
             "id": t["id"], "title": t.get("title", ""), "type": t["type"],
             "prompt": t["prompt"], "deps": t.get("deps", []),
@@ -124,6 +125,11 @@ def cmd_abandon(a) -> int:
         return 1
     runs.abandon(rd)
     print("abandoned")
+    return 0
+
+
+def cmd_install_workflow(a) -> int:
+    install_mod.install_workflow(a.claude_dir)
     return 0
 
 
@@ -185,6 +191,10 @@ def main(argv=None) -> int:
         p.add_argument("--settings", default=str(Path.home() / ".claude" / "settings.json"))
         p.add_argument("--claude-dir", default=home_claude)
         p.set_defaults(fn=fn)
+
+    p = sub.add_parser("install-workflow")  # plugin bootstrap: workflow file only
+    p.add_argument("--claude-dir", default=home_claude)
+    p.set_defaults(fn=cmd_install_workflow)
 
     a = parser.parse_args(argv)
     return a.fn(a)

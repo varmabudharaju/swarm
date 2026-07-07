@@ -1,0 +1,17 @@
+# .shotlist.yaml — shot list for `shotlist` (successor to capture).
+# Evidence shots for the per-run model-ladder feature.
+
+output:
+  dir: docs/screenshots
+
+shots:
+  - name: 03-ladder-policy-enforced
+    kind: session
+    clear_between: true
+    steps:
+      - name: ladder-rejects-out-of-policy
+        command: "swarm validate docs/examples/ladder-duo/graph-violation.json || true"
+        alt: "swarm validate rejects a fable-tagged task in a duo (sonnet+opus) run with error[model-policy]"
+      - name: ladder-accepts-and-emits
+        command: "swarm validate docs/examples/ladder-duo/graph.json && swarm args docs/examples/ladder-duo/graph.json --session-model opus | python3 -m json.tool | grep -A4 allowed_models"
+        alt: "the corrected opus-tagged graph validates and swarm args emits allowed_models to the executor"

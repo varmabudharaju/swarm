@@ -14,6 +14,7 @@ you the expected value).
   "graph_hash": "<from swarm validate>",
   "budget_tokens": null,
   "agent_ceiling": null,
+  "allowed_models": ["haiku", "sonnet", "opus"],
   "tasks": [
     {
       "id": "scan-routes",
@@ -52,18 +53,26 @@ Implement-task schema must add: branch, worktree_path, files_touched, commits.
 
 ## Model tiers
 
-Optional per-task `model`: one of `haiku | sonnet | opus | fable` (tier
-aliases only — versions are not addressable). Set it EXPLICITLY on every task
-as a per-task judgment weighing quality stakes, ambiguity, complexity, token
-cost, and retry economics — lowest tier that fits:
+Graph-level `allowed_models` (optional) is the run's model policy, chosen by
+the user at launch: `economy` = haiku|sonnet|opus (default), `duo` =
+sonnet|opus, `premium` = +fable. It is folded into graph_hash, enforced by
+validation (every explicit task model must be inside it), and the executor
+clamps type-defaults into it (nearest allowed tier above, else below).
+Omitted -> all four models allowed (pre-ladder graphs keep their hashes).
 
-- `fable`/omit: decomposition-grade reasoning, ambiguous goals, final synthesis
+Per-task `model`: one of `haiku | sonnet | opus | fable` (tier aliases only —
+versions are not addressable), drawn from `allowed_models`. Set it EXPLICITLY
+on every task as a per-task judgment weighing quality stakes, ambiguity,
+complexity, token cost, and retry economics — lowest tier that fits:
+
+- top of ladder/omit: decomposition-grade reasoning, ambiguous goals, synthesis
 - `opus`: real coding (implement/integrate, debugging, refactors)
 - `sonnet`: clear-goal bounded work (scans, diff review, adversarial verify)
 - `haiku`: mechanical (output/schema checks, extraction, formatting, capture)
 
 Omitted -> the executor applies safety-net defaults by type
 (research/review/verify -> sonnet; implement/integrate -> opus; synthesize ->
-inherit), capped at the launching session's tier (`session_model`). Explicit
-values are never capped. If a tier fails every retry, the final retry re-runs
+inherit), clamped into `allowed_models` and then capped at the launching
+session's tier (`session_model`) — the session cap wins. Explicit values are
+never clamped or capped. If a tier fails every retry, the final retry re-runs
 on the session model and the run report lists it under `fallbacks`.

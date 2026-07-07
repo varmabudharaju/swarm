@@ -35,36 +35,44 @@ SubagentStop hook automatically - workers never manage their own persistence.
    `rate_limits`. If `five_hour.used_percentage > 85`, tell the user the
    `resets_at` time and offer to defer. Otherwise set `agent_ceiling` in the
    graph from remaining headroom (rough guide: each task ~1-3% of a 5h window).
-3. **Decompose** into `graph.json` per `references/graph-format.md`, following a
+3. **Choose the ladder**: ask the user ONE question (AskUserQuestion) - which
+   model ladder for this run - unless they already said so in the goal:
+   - `economy` (default): haiku, sonnet, opus - opus tops judgment/synthesis
+   - `duo`: sonnet, opus only
+   - `premium`: haiku, sonnet, opus, fable (only if their plan has fable)
+   Set the chosen list as `allowed_models` in graph.json and assign every
+   task's `model` from inside it. Judgment/synthesis tasks: omit `model`
+   (inherit the session - run your main session on opus with thinking).
+4. **Decompose** into `graph.json` per `references/graph-format.md`, following a
    shape from `references/shapes.md`. Maximize width honestly: every task that
    CAN be independent IS independent; deps are data dependencies, never phases.
    Target width near 16 (the concurrency cap); going wider buys queueing, not speed.
    Verify tiers: one verifier per 4-6 sibling finding-tasks; per-task verify only
    for results feeding implement tasks.
-   Assign `model` explicitly per task (lowest tier that fits - see
-   references/graph-format.md "Model tiers"): weigh quality stakes (does the
-   result feed implement tasks?), ambiguity, complexity, token cost, retry
-   economics. Mechanical checks -> haiku; bounded scans/verifies -> sonnet;
-   real coding -> opus; judgment/synthesis -> omit (inherit). Defaults are a
-   safety net, not a reason to skip the decision.
-4. **Packets**: write one `packets/<id>.md` per task per
+   Assign `model` explicitly per task from the chosen ladder (lowest tier that
+   fits - see references/graph-format.md "Model tiers"): weigh quality stakes
+   (does the result feed implement tasks?), ambiguity, complexity, token cost,
+   retry economics. Mechanical checks -> haiku; bounded scans/verifies ->
+   sonnet; real coding -> opus; judgment/synthesis -> omit (inherit, the top
+   of your ladder). Defaults are a safety net, not a reason to skip the decision.
+5. **Packets**: write one `packets/<id>.md` per task per
    `references/packet-guide.md`. Self-containment test: could a stranger with
    only this packet + prompt do the work? If not, the packet is incomplete.
-5. **Validate**: run `swarm validate <run-dir>/graph.json`. Fix every error;
+6. **Validate**: run `swarm validate <run-dir>/graph.json`. Fix every error;
    treat warnings as design feedback, not noise.
-6. **Review gate**: spawn ONE swarm-verifier agent with the goal + graph.json
+7. **Review gate**: spawn ONE swarm-verifier agent with the goal + graph.json
    content; ask it to attack the decomposition (missing tasks, fake width, fan-in
    mush, packet gaps, model tiers over- or under-provisioned for the task).
    Fix what it finds.
-7. **Launch**: `ARGS=$(swarm args <run-dir>/graph.json --session-model <your-tier>)`
+8. **Launch**: `ARGS=$(swarm args <run-dir>/graph.json --session-model <your-tier>)`
    where `<your-tier>` is THIS session's model tier (haiku|sonnet|opus|fable -
    you know your own model), then invoke the Workflow tool:
    `{name: "swarm-run", args: <parsed ARGS JSON>}`.
-8. **Finish**: when the workflow returns, act on its state:
+9. **Finish**: when the workflow returns, act on its state:
    - completed cleanly -> `swarm finish <run-dir> --status completed`, then
      synthesize/present results (read full result files, not just summaries).
    - if the result has a non-empty `fallbacks` map, tell the user which tasks
-     did not run on their intended tier (e.g. "design-api: fable->inherit").
+     did not run on their intended tier (e.g. "design-api: opus->inherit").
    - `paused == "paused_for_budget"` or `"agent_ceiling"` ->
      `swarm finish <run-dir> --status paused_for_budget`; tell the user what
      remains and how to resume.

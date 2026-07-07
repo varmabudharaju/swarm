@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ctx-swarm"
-version = "0.2.0"
+version = "0.3.0"
 description = "Graph-first multi-agent orchestrator for Claude Code - parallel task graphs, hook-written checkpoints, ask-first resume, right-sized model tiers"
 readme = "README.md"
 license = { text = "MIT" }

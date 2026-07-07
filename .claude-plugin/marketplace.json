@@ -1,0 +1,14 @@
+{
+  "name": "swarm",
+  "owner": { "name": "Varma Budharaju" },
+  "description": "swarm - graph-first multi-agent orchestration for Claude Code",
+  "plugins": [
+    {
+      "name": "swarm",
+      "source": "./",
+      "description": "A foreman for teams of Claude Code agents - parallel task graphs, durable checkpoints, ask-first resume, right-sized model tiers.",
+      "license": "MIT",
+      "homepage": "https://github.com/varmabudharaju/swarm"
+    }
+  ]
+}
