@@ -37,13 +37,46 @@ def generate_workflow() -> str:
 def _load_settings(sp: Path) -> dict:
     if not sp.exists():
         return {}
+    text = sp.read_text(encoding="utf-8")
+    if not text.strip():
+        return {}
     try:
-        return json.loads(sp.read_text(encoding="utf-8")) or {}
+        data = json.loads(text)
     except json.JSONDecodeError as e:
         raise SettingsError(
             f"{sp} exists but is not valid JSON ({e}). Fix it or restore "
             f"{sp.name}.bak-swarm before running swarm install/uninstall."
         ) from e
+    if not isinstance(data, dict):
+        # A valid-JSON but non-object top level ([], null, 0, "", [1,2,3]) is
+        # not a settings document. Refuse loudly instead of coercing it to {}
+        # (which would silently wipe the file) or crashing later on .setdefault.
+        raise SettingsError(
+            f"{sp} must contain a JSON object at the top level, got "
+            f"{type(data).__name__}. Fix it or restore {sp.name}.bak-swarm "
+            f"before running swarm install/uninstall."
+        )
+    return data
+
+
+def _require_assets() -> None:
+    """Fail loud before touching settings if the packaged install assets are
+    missing. A non-editable `pip install` ships only swarm_lib (not workflows/,
+    skills/, agents/), so repo_root()-relative reads would explode mid-install
+    and leave a half-registered hook behind."""
+    root = repo_root()
+    required = [
+        root / "workflows" / "swarm-run.header.js",
+        root / "workflows" / "run_graph.mjs",
+        root / "workflows" / "swarm-run.footer.js",
+        root / "skills" / "swarm",
+        root / "agents",
+    ]
+    if any(not p.exists() for p in required):
+        raise SettingsError(
+            "swarm must be installed editable (pip install -e .) or as the "
+            f"Claude Code plugin - installation assets not found at {root}"
+        )
 
 
 def _has_marker(entries) -> bool:
@@ -80,6 +113,7 @@ def install_workflow(claude_dir) -> None:
 
 
 def install(settings_path, claude_dir) -> None:
+    _require_assets()  # fail loud before any settings mutation / half-install
     sp = Path(settings_path).resolve()
     cd = Path(claude_dir)
     settings = _load_settings(sp)

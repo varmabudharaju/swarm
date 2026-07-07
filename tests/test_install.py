@@ -153,3 +153,48 @@ def test_install_workflow_is_idempotent(tmp_path):
     first_mtime = wf.stat().st_mtime_ns
     install.install_workflow(cd)
     assert wf.stat().st_mtime_ns == first_mtime  # unchanged content -> no write
+
+
+# --- Group 1: settings hardening (findings 3, 6) ---
+
+
+def test_non_dict_settings_list_refused(tmp_path):
+    """A JSON array at the top level must raise SettingsError, not crash later
+    or be silently overwritten (finding 3)."""
+    sp = tmp_path / "settings.json"
+    sp.write_text("[1, 2, 3]")
+    before = sp.read_text()
+    try:
+        install.install(sp, claude_dir(tmp_path))
+        assert False, "should have raised"
+    except install.SettingsError:
+        pass
+    assert sp.read_text() == before  # untouched, not wiped
+
+
+def test_empty_list_settings_refused(tmp_path):
+    """`[]` is falsy and used to be coerced to `{}` then overwritten; it must
+    raise instead (finding 3)."""
+    sp = tmp_path / "settings.json"
+    sp.write_text("[]")
+    try:
+        install.install(sp, claude_dir(tmp_path))
+        assert False, "should have raised"
+    except install.SettingsError:
+        pass
+    assert sp.read_text() == "[]"  # untouched, not silently wiped
+
+
+def test_install_fails_loud_when_assets_missing(tmp_path, monkeypatch):
+    """Non-editable pip installs ship only swarm_lib; install() must fail loud
+    BEFORE writing settings.json, so no half-install is left behind (finding 6)."""
+    fake_root = tmp_path / "fake_repo_root"
+    fake_root.mkdir()
+    monkeypatch.setattr(install, "repo_root", lambda: fake_root)
+    sp = tmp_path / "settings.json"
+    try:
+        install.install(sp, claude_dir(tmp_path))
+        assert False, "should have raised"
+    except install.SettingsError as e:
+        assert "installation assets not found" in str(e)
+    assert not sp.exists()  # settings.json never created -> no half-install
