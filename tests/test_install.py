@@ -254,3 +254,67 @@ def test_plugin_flow_uninstall_without_settings(tmp_path):
     assert not wf.exists()                                    # workflow removed
     assert not sp.exists()                                    # none conjured up
     assert not (tmp_path / "settings.json.bak-swarm").exists()
+
+
+# --- Group 3: install hook logic (findings 4, 9) ---
+
+
+def test_install_refreshes_stale_interpreter_hook(tmp_path):
+    """A marker entry baked with an old/broken interpreter path must be rewritten
+    to the current hook_command() on reinstall, not left stale (finding 4)."""
+    stale = {
+        "hooks": {
+            "SubagentStop": [
+                {"hooks": [{"type": "command",
+                            "command": '"/old/broken/python" -m swarm_lib.hook'}]}
+            ],
+        }
+    }
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(stale))
+    cd = claude_dir(tmp_path)
+    install.install(sp, cd)
+    s = json.loads(sp.read_text())
+    cmds = [h["command"] for e in s["hooks"]["SubagentStop"] for h in e["hooks"]]
+    assert install.hook_command() in cmds              # refreshed to current interp
+    assert "/old/broken/python" not in " ".join(cmds)  # stale command gone
+    marker_cmds = [c for c in cmds if "-m swarm_lib.hook" in c]
+    assert len(marker_cmds) == 1                        # no duplicate entry appended
+
+
+def _make_swarm_plugin(cd):
+    p = cd / "plugins" / "marketplace-x" / "swarm" / ".claude-plugin"
+    p.mkdir(parents=True, exist_ok=True)
+    (p / "plugin.json").write_text('{"name": "swarm"}')
+
+
+def test_install_skips_settings_hooks_when_plugin_present(tmp_path):
+    """With the swarm plugin installed (it registers hooks natively), install()
+    must NOT append hook entries to settings.json - but must still install the
+    skill/workflow/agents (finding 9)."""
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(EXISTING))
+    before = sp.read_text()
+    cd = claude_dir(tmp_path)
+    _make_swarm_plugin(cd)
+    install.install(sp, cd)
+    assert sp.read_text() == before  # settings.json untouched -> no double-register
+    s = json.loads(sp.read_text())
+    for ev in ("SubagentStop", "SessionStart"):
+        cmds = [h["command"] for e in s["hooks"][ev] for h in e["hooks"]]
+        assert not any("swarm_lib" in c for c in cmds)
+    assert (cd / "skills" / "swarm" / "SKILL.md").exists()
+    assert (cd / "workflows" / "swarm-run.js").exists()
+    assert (cd / "agents" / "swarm-reader.md").exists()
+
+
+def test_install_registers_hooks_when_no_plugin(tmp_path):
+    """Negative case for finding 9: absent a plugin, hooks are registered."""
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(EXISTING))
+    cd = claude_dir(tmp_path)
+    install.install(sp, cd)
+    s = json.loads(sp.read_text())
+    for ev in ("SubagentStop", "SessionStart"):
+        cmds = [h["command"] for e in s["hooks"][ev] for h in e["hooks"]]
+        assert any("-m swarm_lib.hook" in c for c in cmds)

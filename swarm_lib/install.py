@@ -84,6 +84,17 @@ def _has_marker(entries) -> bool:
                for e in entries for h in (e.get("hooks") or []))
 
 
+def _plugin_installed(cd: Path) -> bool:
+    """True if the swarm Claude Code plugin is installed under <claude_dir>/plugins.
+    The plugin ships the checkpoint/nag hooks natively via hooks.json (which
+    _has_marker never scans), so settings.json must not also register them or
+    they would double-fire."""
+    plugins = cd / "plugins"
+    if not plugins.is_dir():
+        return False
+    return any(plugins.glob("**/swarm/.claude-plugin/plugin.json"))
+
+
 def _write_settings(sp: Path, settings: dict) -> None:
     backup = sp.with_name(sp.name + ".bak-swarm")
     mode = None
@@ -120,13 +131,29 @@ def install(settings_path, claude_dir) -> None:
     _require_assets()  # fail loud before any settings mutation / half-install
     sp = Path(settings_path).resolve()
     cd = Path(claude_dir)
-    settings = _load_settings(sp)
-    hooks = settings.setdefault("hooks", {})
-    for ev in HOOK_EVENTS:
-        entries = hooks.setdefault(ev, [])
-        if not _has_marker(entries):
-            entries.append({"hooks": [{"type": "command", "command": hook_command()}]})
-    _write_settings(sp, settings)
+    if _plugin_installed(cd):
+        # The plugin owns the hooks (via hooks.json). Registering them in
+        # settings.json too would double-fire the checkpoint/nag hooks.
+        print("swarm plugin detected - skipping settings.json hook registration "
+              "(the plugin ships these hooks natively)")
+    else:
+        settings = _load_settings(sp)
+        hooks = settings.setdefault("hooks", {})
+        current = hook_command()
+        for ev in HOOK_EVENTS:
+            entries = hooks.setdefault(ev, [])
+            found = False
+            for entry in entries:
+                for h in (entry.get("hooks") or []):
+                    if HOOK_MARKER in (h.get("command") or ""):
+                        found = True
+                        if h.get("command") != current:
+                            # Entry baked by an old/broken interpreter: refresh it
+                            # instead of leaving a stale command that never runs.
+                            h["command"] = current
+            if not found:
+                entries.append({"hooks": [{"type": "command", "command": current}]})
+        _write_settings(sp, settings)
 
     install_workflow(cd)
     skill_dst = cd / "skills" / "swarm"
