@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "run_id": "2026-07-07-smoke",
+  "goal": "smoke test for allowed_models policy enforcement",
+  "project": "/tmp/smoke",
+  "graph_hash": "4b6cc61e3c8dbfdf",
+  "budget_tokens": null,
+  "agent_ceiling": null,
+  "allowed_models": [
+    "sonnet",
+    "opus"
+  ],
+  "tasks": [
+    {
+      "id": "scan",
+      "title": "Scan something",
+      "type": "research",
+      "prompt": "Scan the target directory for issues and report each one with file and line. This prompt is intentionally long enough to look like a real packet-backed task prompt for the smoke test.",
+      "packet": "packets/scan.md",
+      "deps": [],
+      "agent_type": "swarm-reader",
+      "isolation": null,
+      "model": "fable",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "summary"
+        ]
+      },
+      "max_retries": 1
+    }
+  ]
+}
