@@ -84,6 +84,8 @@ Every run picks a **model ladder** first — the foreman asks once at launch (or
 
 The choice is written into `graph.json` as `allowed_models`, folded into the tamper-evident hash, enforced by validation, and honored on resume. Run your main (foreman) session on **Opus with extended thinking** — decomposition and synthesis inherit it.
 
+Each job can also carry an **effort tier** (`low`–`max`) — the second economy lever, orthogonal to the model: mechanical checks run at `low`, judgment tasks inherit the session's effort, and the setting survives model-fallback retries.
+
 Within the ladder, every job carries a model tier — chosen by the foreman per job, weighing quality stakes, ambiguity, complexity, and token cost. **Lowest tier that fits:**
 
 | Tier | Right for |
@@ -172,6 +174,7 @@ swarm args <graph.json> [--resume] [--session-model <tier>]
 swarm status <run-dir>
 swarm finish <run-dir> --status completed|paused_for_budget|failed-partial
 swarm abandon <run-dir>
+swarm gc [--days N] [--include-failed] [--delete]   # reclaim old finished runs (dry-run by default)
 swarm install / swarm uninstall
 ```
 
