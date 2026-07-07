@@ -1,4 +1,12 @@
 #!/bin/sh
 # swarm CLI for plugin installs: the package lives in the plugin root.
 ROOT="${CLAUDE_PLUGIN_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}"
-PYTHONPATH="$ROOT" exec python3 -m swarm_lib.cli "$@"
+if command -v python3 >/dev/null 2>&1; then
+  PY=python3
+elif command -v python >/dev/null 2>&1; then
+  PY=python
+else
+  echo "swarm: no python3 or python interpreter found on PATH" >&2
+  exit 1
+fi
+PYTHONPATH="$ROOT" exec "$PY" -m swarm_lib.cli "$@"
