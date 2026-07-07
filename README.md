@@ -125,6 +125,17 @@ swarm's first production run reviewed its own sibling tool: a 9-agent adversaria
 
 ## Install
 
+**As a Claude Code plugin** (recommended):
+
+```
+/plugin marketplace add varmabudharaju/swarm
+/plugin install swarm@swarm
+```
+
+Skill, agents, and hooks register automatically; the `swarm` CLI lands on your PATH, and the run workflow is bootstrapped on session start. Restart your session, then `/swarm <goal>`.
+
+**Or via pip**:
+
 ```bash
 python3 -m pip install --user -e .
 swarm install        # hooks into settings.json; copies skill/workflow/agents

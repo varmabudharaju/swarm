@@ -66,6 +66,19 @@ def _write_settings(sp: Path, settings: dict) -> None:
         os.chmod(sp, mode)
 
 
+def install_workflow(claude_dir) -> None:
+    """Generate ~/.claude/workflows/swarm-run.js (write-if-changed). This is the
+    only piece a plugin install needs from settings.json's neighbourhood: plugins
+    ship skills/agents/hooks natively but cannot ship a workflow, so the plugin's
+    SessionStart hook calls this to bootstrap the workflow file."""
+    cd = Path(claude_dir)
+    wf = cd / "workflows" / "swarm-run.js"
+    wf.parent.mkdir(parents=True, exist_ok=True)
+    content = generate_workflow()
+    if not wf.exists() or wf.read_text(encoding="utf-8") != content:
+        wf.write_text(content, encoding="utf-8")
+
+
 def install(settings_path, claude_dir) -> None:
     sp = Path(settings_path).resolve()
     cd = Path(claude_dir)
@@ -77,12 +90,11 @@ def install(settings_path, claude_dir) -> None:
             entries.append({"hooks": [{"type": "command", "command": hook_command()}]})
     _write_settings(sp, settings)
 
-    (cd / "workflows").mkdir(parents=True, exist_ok=True)
-    (cd / "workflows" / "swarm-run.js").write_text(generate_workflow(), encoding="utf-8")
+    install_workflow(cd)
     skill_dst = cd / "skills" / "swarm"
     if skill_dst.exists():
         shutil.rmtree(skill_dst)
-    shutil.copytree(repo_root() / "skill", skill_dst)
+    shutil.copytree(repo_root() / "skills" / "swarm", skill_dst)
     (cd / "agents").mkdir(parents=True, exist_ok=True)
     for name in AGENT_FILES:
         shutil.copy2(repo_root() / "agents" / name, cd / "agents" / name)

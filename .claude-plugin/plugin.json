@@ -1,0 +1,12 @@
+{
+  "name": "swarm",
+  "displayName": "swarm",
+  "version": "0.3.0",
+  "description": "A foreman for teams of Claude Code agents - decomposes one big goal into a parallel task graph, checkpoints every result to disk via hooks, survives any interruption with ask-first resume, and right-sizes the model tier for every job.",
+  "author": { "name": "Varma Budharaju" },
+  "homepage": "https://github.com/varmabudharaju/swarm",
+  "repository": "https://github.com/varmabudharaju/swarm",
+  "license": "MIT",
+  "keywords": ["agents", "orchestration", "multi-agent", "dag", "parallel"],
+  "hooks": "./hooks/hooks.json"
+}
