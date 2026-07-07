@@ -41,6 +41,8 @@ def validate(graph) -> list:
     if am is not None:
         if not isinstance(am, list) or not am:
             err("allowed-models", "allowed_models must be a non-empty list")
+        elif not all(isinstance(m, str) for m in am):
+            err("allowed-models", "allowed_models entries must all be strings")
         elif len(set(am)) != len(am):
             err("allowed-models", "allowed_models contains duplicates")
         elif any(m not in MODELS for m in am):

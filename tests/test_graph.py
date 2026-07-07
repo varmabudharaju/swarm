@@ -165,3 +165,10 @@ def test_hash_covers_allowed_models_when_present():
     gr = g([task("a")], allowed_models=["sonnet", "opus"])
     gr["allowed_models"] = ["haiku", "sonnet", "opus"]
     assert "hash" in codes(graph.errors(graph.validate(gr)))
+
+
+def test_allowed_models_nonstring_entry_no_crash():
+    """Nested/non-string entries must yield a clean allowed-models error, not TypeError."""
+    for bad in (["haiku", ["nested"]], ["sonnet", {"m": 1}], ["opus", 3]):
+        gr = g([task("a")], allowed_models=bad)
+        assert "allowed-models" in codes(graph.errors(graph.validate(gr)))
