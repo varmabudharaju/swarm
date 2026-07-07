@@ -2,7 +2,7 @@ import json
 
 from conftest import make_run, task
 
-from swarm_lib import cli, paths, runs
+from swarm_lib import cli, install, paths, runs
 
 
 def graph_with_hash(tmp_path, tasks):
@@ -266,3 +266,52 @@ def test_gc_lists_by_default_and_deletes_with_flag(tmp_path, swarm_home, capsys)
     # nothing left eligible
     assert cli.main(["gc"]) == 0
     assert "nothing eligible" in capsys.readouterr().out
+
+
+# --- install-workflow: plugin bootstrap must never break session start ---
+
+def test_install_workflow_dispatch_happy_path(tmp_path, swarm_home):
+    """cli.main(["install-workflow", ...]) exits 0 and writes the workflow file."""
+    cd = tmp_path / "claude"
+    cd.mkdir()
+    assert cli.main(["install-workflow", "--claude-dir", str(cd)]) == 0
+    wf = cd / "workflows" / "swarm-run.js"
+    assert wf.exists()
+    assert wf.read_text().startswith("export const meta")
+
+
+def test_install_workflow_fails_open_and_logs(tmp_path, swarm_home, monkeypatch):
+    """Runs on every plugin SessionStart: any error must be swallowed (exit 0)
+    and recorded as one line in the swarm log, never a raw traceback into the hook."""
+    def boom(_claude_dir):
+        raise OSError("boom-install-workflow")
+
+    monkeypatch.setattr(install, "install_workflow", boom)
+    cd = tmp_path / "claude"
+    cd.mkdir()
+    assert cli.main(["install-workflow", "--claude-dir", str(cd)]) == 0
+    log = paths.log_path()
+    assert log.exists()
+    assert "boom-install-workflow" in log.read_text()
+
+
+# --- install / uninstall error paths surfaced through cli.main dispatch ---
+
+def test_install_dispatch_corrupted_settings_exits_1(tmp_path, swarm_home, capsys):
+    """Invalid settings.json → cmd_install prints the SettingsError and exits 1."""
+    sp = tmp_path / "settings.json"
+    sp.write_text('{"hooks": [BROKEN')
+    cd = tmp_path / "claude"
+    cd.mkdir()
+    assert cli.main(["install", "--settings", str(sp), "--claude-dir", str(cd)]) == 1
+    assert "not valid JSON" in capsys.readouterr().out
+
+
+def test_uninstall_dispatch_corrupted_settings_exits_1(tmp_path, swarm_home, capsys):
+    """Invalid settings.json → cmd_uninstall prints the SettingsError and exits 1."""
+    sp = tmp_path / "settings.json"
+    sp.write_text('{"hooks": [BROKEN')
+    cd = tmp_path / "claude"
+    cd.mkdir()
+    assert cli.main(["uninstall", "--settings", str(sp), "--claude-dir", str(cd)]) == 1
+    assert "not valid JSON" in capsys.readouterr().out
