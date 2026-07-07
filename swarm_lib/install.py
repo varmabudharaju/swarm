@@ -127,6 +127,36 @@ def install_workflow(claude_dir) -> None:
         wf.write_text(content, encoding="utf-8")
 
 
+def _swap_skill(cd: Path) -> None:
+    """Replace <claude_dir>/skills/swarm atomically: stage the fresh copy in a
+    temp sibling, then rename it into place. A failure mid-copy leaves the
+    previously installed skill dir untouched instead of a destroyed half-install
+    (the old rmtree-then-copytree wiped it before the copy could fail)."""
+    src = repo_root() / "skills" / "swarm"
+    dst = cd / "skills" / "swarm"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    staging = cd / "skills" / f".swarm.stage.{os.getpid()}"
+    old = cd / "skills" / f".swarm.old.{os.getpid()}"
+    for scratch in (staging, old):
+        if scratch.exists():
+            shutil.rmtree(scratch)
+    try:
+        shutil.copytree(src, staging)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise  # dst never touched -> previous skill dir survives
+    if dst.exists():
+        dst.rename(old)
+    try:
+        staging.rename(dst)
+    except BaseException:
+        if old.exists() and not dst.exists():
+            old.rename(dst)  # roll back to the previous skill dir
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    shutil.rmtree(old, ignore_errors=True)
+
+
 def install(settings_path, claude_dir) -> None:
     _require_assets()  # fail loud before any settings mutation / half-install
     sp = Path(settings_path).resolve()
@@ -156,10 +186,7 @@ def install(settings_path, claude_dir) -> None:
         _write_settings(sp, settings)
 
     install_workflow(cd)
-    skill_dst = cd / "skills" / "swarm"
-    if skill_dst.exists():
-        shutil.rmtree(skill_dst)
-    shutil.copytree(repo_root() / "skills" / "swarm", skill_dst)
+    _swap_skill(cd)
     (cd / "agents").mkdir(parents=True, exist_ok=True)
     for name in AGENT_FILES:
         shutil.copy2(repo_root() / "agents" / name, cd / "agents" / name)

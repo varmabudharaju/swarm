@@ -318,3 +318,31 @@ def test_install_registers_hooks_when_no_plugin(tmp_path):
     for ev in ("SubagentStop", "SessionStart"):
         cmds = [h["command"] for e in s["hooks"][ev] for h in e["hooks"]]
         assert any("-m swarm_lib.hook" in c for c in cmds)
+
+
+# --- Group 4: atomic skill replacement (finding 2) ---
+
+
+def test_skill_copy_failure_preserves_existing_skill(tmp_path, monkeypatch):
+    """A mid-copy failure while replacing skills/swarm must leave the previously
+    installed skill dir intact, not destroy it into a half-install (finding 2)."""
+    sp = tmp_path / "settings.json"
+    sp.write_text(json.dumps(EXISTING))
+    cd = claude_dir(tmp_path)
+    install.install(sp, cd)  # first, real install populates skills/swarm
+    skill = cd / "skills" / "swarm"
+    assert (skill / "SKILL.md").exists()
+    # sentinel proves the ORIGINAL dir survived (not a freshly recreated one)
+    (skill / "SENTINEL").write_text("keep-me")
+
+    def boom(*a, **k):
+        raise RuntimeError("copytree failed mid-way")
+    monkeypatch.setattr(install.shutil, "copytree", boom)
+
+    try:
+        install.install(sp, cd)
+        assert False, "install should have propagated the copy failure"
+    except RuntimeError:
+        pass
+    assert (skill / "SKILL.md").exists()               # old skill dir survived
+    assert (skill / "SENTINEL").read_text() == "keep-me"
