@@ -17,3 +17,27 @@ jobs:
           node-version: "20"
       - run: python -m pip install -e . pytest
       - run: python -m pytest tests/ -q   # also drives the node:test scheduler suite
+
+  package:
+    # Prove a NON-editable wheel install is self-contained: the exact failure
+    # mode the 2026-07-07 audit found (assets outside swarm_lib) can't return.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install build
+      - run: python -m build
+      - name: wheel install + lifecycle smoke in a clean venv
+        run: |
+          python -m venv /tmp/venv
+          /tmp/venv/bin/pip install dist/*.whl
+          T=$(mktemp -d)
+          cd /tmp   # away from the checkout so repo assets can't mask a packaging gap
+          /tmp/venv/bin/swarm install --settings "$T/settings.json" --claude-dir "$T/claude"
+          test -f "$T/claude/workflows/swarm-run.js"
+          test -f "$T/claude/skills/swarm/SKILL.md"
+          test -f "$T/claude/agents/swarm-implementer.md"
+          /tmp/venv/bin/swarm uninstall --settings "$T/settings.json" --claude-dir "$T/claude"
+          test ! -f "$T/claude/workflows/swarm-run.js"
