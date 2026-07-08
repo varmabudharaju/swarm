@@ -246,17 +246,17 @@ Evidence with real screenshots for all three runs: [`docs/test-evidence.md`](doc
 
 Skill, agents, and hooks register automatically; the `swarm` CLI lands on your PATH, and the run workflow is bootstrapped on session start. Restart your session, then `/swarm <goal>`.
 
-**Or via pip**:
+**Or via pip** ([`ctx-swarm` on PyPI](https://pypi.org/project/ctx-swarm/)):
 
 ```bash
-python3 -m pip install --user -e .
+python3 -m pip install --user ctx-swarm     # or, for development: pip install -e .
 swarm install        # hooks into settings.json; copies skill/workflow/agents
 # restart your Claude Code session
 ```
 
 Then in Claude Code: `/swarm <goal>` — or `/swarm resume` after an interruption.
 
-Notes: both paths need `python3` on your `PATH` (the plugin's shim falls back to `python`). The pip path requires an **editable** install (`-e`) — a plain `pip install` refuses with a clear error, because the installer reads assets from the repo tree. If you already run the plugin, `swarm install` detects it and skips hook registration so events don't fire twice.
+Notes: both paths need `python3` on your `PATH` (the plugin's shim falls back to `python`). Wheels are self-contained — the install assets ship inside the package (`swarm_lib/_assets`), and a checkout/editable install always wins over the packaged copy so dev edits take effect. If you already run the plugin, `swarm install` detects it and skips hook registration so events don't fire twice.
 
 ## Pieces
 
@@ -382,7 +382,6 @@ Tests: `python3 -m pytest` (Python; also drives the Node suite).
 
 ## Known limitations
 
-- **Editable install only** on the pip path — a non-editable `pip install` fails loud with guidance rather than half-installing. Use `-e .` or the plugin.
 - **Single machine.** Run state, worktrees, and hooks all assume one host.
 - **`python3` (or `python`) must be on PATH** for the plugin's hooks and CLI shim.
 - The `bin/swarm` shim's no-env fallback resolves relative to the script's own path; if a host exposes plugin binaries by *symlinking* them into a shared directory, set `CLAUDE_PLUGIN_ROOT` (the plugin runtime does this).
