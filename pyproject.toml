@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agent-swarm"
+name = "swarm-cc"
 version = "0.4.0"
 description = "Graph-first multi-agent orchestrator for Claude Code - parallel task graphs, hook-written checkpoints, ask-first resume, right-sized model tiers"
 readme = "README.md"

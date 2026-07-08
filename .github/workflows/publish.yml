@@ -1,9 +1,9 @@
 name: publish
 
-# Build and publish agent-swarm to PyPI when a GitHub Release is published.
+# Build and publish swarm-cc to PyPI when a GitHub Release is published.
 # Uses PyPI Trusted Publishing (OIDC) — no API token or password stored anywhere.
 # Same convention as agent-pd and shotlist. Register the trusted publisher on PyPI with:
-#   PyPI Project Name: agent-swarm
+#   PyPI Project Name: swarm-cc
 #   Owner:             varmabudharaju
 #   Repository name:   swarm
 #   Workflow name:     publish.yml

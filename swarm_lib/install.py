@@ -93,7 +93,7 @@ def _require_assets() -> None:
     if not _has_assets(root):
         raise SettingsError(
             "swarm installation assets not found at "
-            f"{root} - reinstall (pip install agent-swarm or pip install -e .) "
+            f"{root} - reinstall (pip install swarm-cc or pip install -e .) "
             "or use the Claude Code plugin"
         )
 
