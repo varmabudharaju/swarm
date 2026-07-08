@@ -246,10 +246,10 @@ Evidence with real screenshots for all three runs: [`docs/test-evidence.md`](doc
 
 Skill, agents, and hooks register automatically; the `swarm` CLI lands on your PATH, and the run workflow is bootstrapped on session start. Restart your session, then `/swarm <goal>`.
 
-**Or via pip** ([`ctx-swarm` on PyPI](https://pypi.org/project/ctx-swarm/)):
+**Or via pip** ([`agent-swarm` on PyPI](https://pypi.org/project/agent-swarm/)):
 
 ```bash
-python3 -m pip install --user ctx-swarm     # or, for development: pip install -e .
+python3 -m pip install --user agent-swarm   # or, for development: pip install -e .
 swarm install        # hooks into settings.json; copies skill/workflow/agents
 # restart your Claude Code session
 ```
