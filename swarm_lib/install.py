@@ -19,12 +19,37 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def packaged_assets_root() -> Path:
+    return Path(__file__).resolve().parent / "_assets"
+
+
+def _has_assets(root: Path) -> bool:
+    required = [
+        root / "workflows" / "swarm-run.header.js",
+        root / "workflows" / "run_graph.mjs",
+        root / "workflows" / "swarm-run.footer.js",
+        root / "skills" / "swarm",
+        root / "agents",
+    ]
+    return all(p.exists() for p in required)
+
+
+def asset_root() -> Path:
+    """Install assets live at the repo root in a checkout/editable install and
+    under swarm_lib/_assets inside a built wheel (hatchling force-include).
+    Prefer the checkout so dev edits win; fall back to the packaged copy."""
+    root = repo_root()
+    if _has_assets(root):
+        return root
+    return packaged_assets_root()
+
+
 def hook_command() -> str:
     return f'"{sys.executable}" {HOOK_MARKER}'
 
 
 def generate_workflow() -> str:
-    wf = repo_root() / "workflows"
+    wf = asset_root() / "workflows"
     header = (wf / "swarm-run.header.js").read_text(encoding="utf-8")
     body = (wf / "run_graph.mjs").read_text(encoding="utf-8")
     footer = (wf / "swarm-run.footer.js").read_text(encoding="utf-8")
@@ -60,22 +85,16 @@ def _load_settings(sp: Path) -> dict:
 
 
 def _require_assets() -> None:
-    """Fail loud before touching settings if the packaged install assets are
-    missing. A non-editable `pip install` ships only swarm_lib (not workflows/,
-    skills/, agents/), so repo_root()-relative reads would explode mid-install
-    and leave a half-registered hook behind."""
-    root = repo_root()
-    required = [
-        root / "workflows" / "swarm-run.header.js",
-        root / "workflows" / "run_graph.mjs",
-        root / "workflows" / "swarm-run.footer.js",
-        root / "skills" / "swarm",
-        root / "agents",
-    ]
-    if any(not p.exists() for p in required):
+    """Fail loud before touching settings if install assets are missing from
+    BOTH the repo checkout and the packaged swarm_lib/_assets fallback (a
+    corrupted or partial installation). Checked before any settings mutation
+    so a failure never leaves a half-registered hook behind."""
+    root = asset_root()
+    if not _has_assets(root):
         raise SettingsError(
-            "swarm must be installed editable (pip install -e .) or as the "
-            f"Claude Code plugin - installation assets not found at {root}"
+            "swarm installation assets not found at "
+            f"{root} - reinstall (pip install ctx-swarm or pip install -e .) "
+            "or use the Claude Code plugin"
         )
 
 
@@ -127,7 +146,7 @@ def _swap_skill(cd: Path) -> None:
     temp sibling, then rename it into place. A failure mid-copy leaves the
     previously installed skill dir untouched instead of a destroyed half-install
     (the old rmtree-then-copytree wiped it before the copy could fail)."""
-    src = repo_root() / "skills" / "swarm"
+    src = asset_root() / "skills" / "swarm"
     dst = cd / "skills" / "swarm"
     dst.parent.mkdir(parents=True, exist_ok=True)
     staging = cd / "skills" / f".swarm.stage.{os.getpid()}"
@@ -184,7 +203,7 @@ def install(settings_path, claude_dir) -> None:
     _swap_skill(cd)
     (cd / "agents").mkdir(parents=True, exist_ok=True)
     for name in AGENT_FILES:
-        shutil.copy2(repo_root() / "agents" / name, cd / "agents" / name)
+        shutil.copy2(asset_root() / "agents" / name, cd / "agents" / name)
 
 
 def uninstall(settings_path, claude_dir) -> None:

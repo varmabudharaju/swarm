@@ -362,3 +362,49 @@ def test_install_workflow_overwrites_stale_content(tmp_path):
     content = wf.read_text()
     assert content == install.generate_workflow()  # rewritten with fresh content
     assert "stale outdated workflow" not in content
+
+
+def _fake_packaged_assets(tmp_path):
+    """Build a minimal wheel-layout _assets tree."""
+    pk = tmp_path / "pkg_assets"
+    (pk / "workflows").mkdir(parents=True)
+    (pk / "workflows" / "swarm-run.header.js").write_text("// header")
+    (pk / "workflows" / "run_graph.mjs").write_text("export function f() {}")
+    (pk / "workflows" / "swarm-run.footer.js").write_text("// footer")
+    (pk / "skills" / "swarm").mkdir(parents=True)
+    (pk / "skills" / "swarm" / "SKILL.md").write_text("# skill")
+    (pk / "agents").mkdir()
+    for name in install.AGENT_FILES:
+        (pk / "agents" / name).write_text(f"# {name}")
+    return pk
+
+
+def test_asset_root_prefers_repo_checkout():
+    """In a git checkout (or editable install) the repo dirs win."""
+    assert install.asset_root() == install.repo_root()
+
+
+def test_asset_root_falls_back_to_packaged_assets(tmp_path, monkeypatch):
+    """Wheel installs have no repo dirs; assets come from swarm_lib/_assets."""
+    fake_root = tmp_path / "empty_repo_root"
+    fake_root.mkdir()
+    monkeypatch.setattr(install, "repo_root", lambda: fake_root)
+    pk = _fake_packaged_assets(tmp_path)
+    monkeypatch.setattr(install, "packaged_assets_root", lambda: pk)
+    assert install.asset_root() == pk
+
+
+def test_install_works_from_packaged_assets(tmp_path, monkeypatch):
+    """The whole install() path must work with ONLY packaged assets (wheel mode)."""
+    fake_root = tmp_path / "empty_repo_root"
+    fake_root.mkdir()
+    monkeypatch.setattr(install, "repo_root", lambda: fake_root)
+    pk = _fake_packaged_assets(tmp_path)
+    monkeypatch.setattr(install, "packaged_assets_root", lambda: pk)
+    sp = tmp_path / "settings.json"
+    cd = claude_dir(tmp_path)
+    install.install(sp, cd)
+    assert (cd / "workflows" / "swarm-run.js").exists()
+    assert (cd / "skills" / "swarm" / "SKILL.md").exists()
+    for name in install.AGENT_FILES:
+        assert (cd / "agents" / name).exists()
