@@ -1,5 +1,5 @@
 # .shotlist.yaml — shot list for `shotlist` (successor to capture).
-# Evidence shots for the per-run model-ladder feature.
+# Evidence shots for the per-run model-ladder feature + PyPI release.
 
 output:
   dir: docs/screenshots
@@ -15,3 +15,11 @@ shots:
       - name: ladder-accepts-and-emits
         command: "swarm validate docs/examples/ladder-duo/graph.json && swarm args docs/examples/ladder-duo/graph.json --session-model opus | python3 -m json.tool | grep -A4 allowed_models"
         alt: "the corrected opus-tagged graph validates and swarm args emits allowed_models to the executor"
+
+  - name: 04-pypi-install
+    kind: session
+    clear_between: true
+    steps:
+      - name: pypi-package-installed
+        command: "cd /tmp && python3 -m pip show swarm-cc | sed -n 1,3p && python3 -c \"import swarm_lib.install as i; print('asset source:', i.asset_root())\" && swarm validate --help | sed -n 1,2p"
+        alt: "swarm-cc 0.4.0 installed from PyPI; install assets resolved from inside the wheel; swarm CLI live"

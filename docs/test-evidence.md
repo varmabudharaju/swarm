@@ -101,3 +101,14 @@ gate, and worktree-quarantined implement tasks end to end.
 Known descope: pyproject non-editable packaging still requires `pip install
 -e .` or the plugin path; it now fails loud (SettingsError) instead of a raw
 traceback.
+
+## PyPI release verification (2026-07-08, v0.4.0 as swarm-cc)
+
+`swarm-cc 0.4.0` published via trusted publishing (publish.yml, all jobs
+green). Verified on the real machine as a fresh user would: editable dev
+install removed, `pip install swarm-cc` from the live index, `swarm install`
+resolved its assets from INSIDE the wheel
+(`site-packages/swarm_lib/_assets`) and landed skill/workflow/agents into
+`~/.claude` - the audit's non-editable-install defect is dead in the shipped
+artifact.
+![pypi install](screenshots/01-pypi-package-installed.png)
