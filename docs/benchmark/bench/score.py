@@ -27,16 +27,27 @@ def findings(report_path):
         if m: out.append({"file": m.group(1), "line": int(m.group(2)), "text": ln.lower()})
     return out
 
-def score(key, fs):
+def score(key, fs, line_tol=3):
+    """A finding matches a seeded bug when it names the same file (by basename)
+    and a line within +/-line_tol. On a several-hundred-file repo, a hit at the
+    exact file+line is almost certainly the seeded bug regardless of how the
+    auditor described it, so category words are a tiebreak, not a requirement
+    (operator-flip bugs rarely get named with a fixed vocabulary)."""
     matched, used = [], set()
     for bug in key["bugs"]:
-        hit = None
-        for i, f in enumerate(fs):
-            if i in used or not f["file"].endswith(bug["file"].split("/")[-1]): continue
-            if abs(f["line"] - bug["line"]) > 5: continue
-            if any(w in f["text"] for w in CATEGORY_WORDS.get(bug["category"], [])):
-                hit = i; break
-        if hit is not None: used.add(hit); matched.append({**bug, "matched_line": fs[hit]["line"]})
+        base = bug["file"].split("/")[-1]
+        cands = [i for i, f in enumerate(fs)
+                 if i not in used and f["file"].endswith(base)
+                 and abs(f["line"] - bug["line"]) <= line_tol]
+        if not cands:
+            continue
+        # prefer a candidate whose text hints the right category, else nearest line
+        words = CATEGORY_WORDS.get(bug["category"], [])
+        cands.sort(key=lambda i: (not any(w in fs[i]["text"] for w in words),
+                                  abs(fs[i]["line"] - bug["line"])))
+        hit = cands[0]
+        used.add(hit)
+        matched.append({**bug, "matched_line": fs[hit]["line"]})
     return {"recall_matches": matched, "recall": len(matched) / key["total"],
             "total_findings": len(fs), "unmatched_findings": len(fs) - len(used)}
 
