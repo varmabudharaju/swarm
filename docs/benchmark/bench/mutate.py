@@ -65,42 +65,56 @@ def main():
         return (any(p in ("test", "tests", "__pycache__") for p in parts)
                 or f.name.startswith("test_") or f.name.endswith("_test.py"))
 
-    files = sorted(f for f in tree.rglob("*.py") if not is_test(f))
-    key = []
-    for f in files:
-        if len(key) >= a.n:
-            break
+    def first_valid_site(f):
+        """Return (lines, lineno, search, replace, cat, desc) for the first
+        applicable, unambiguous, still-compiling site in f, or None."""
         try:
             src = f.read_text(encoding="utf-8")
             sites = _sites(ast.parse(src))
         except (SyntaxError, UnicodeDecodeError):
-            continue
+            return None
         lines = src.splitlines(keepends=True)
-        applied = 0
         for lineno, search, replace, cat, desc in sites:
-            if applied >= a.max_per_file or len(key) >= a.n:
-                break
             i = lineno - 1
             if i >= len(lines) or lines[i].count(search) != 1:
                 continue
-            new_line = lines[i].replace(search, replace, 1)
-            trial = "".join(lines[:i] + [new_line] + lines[i + 1:])
+            trial = "".join(lines[:i] + [lines[i].replace(search, replace, 1)] + lines[i + 1:])
             try:
-                ast.parse(trial)  # must still compile
+                ast.parse(trial)
             except SyntaxError:
                 continue
-            lines[i] = new_line
-            rel = str(f.relative_to(tree))
-            key.append({"file": rel, "line": lineno, "category": cat, "description": desc})
-            applied += 1
-        if applied:
-            f.write_text("".join(lines), encoding="utf-8")
-            print(f"mutated {f.relative_to(tree)} x{applied}")
+            return (lines, i, search, replace, cat, desc)
+        return None
+
+    # SCATTER, don't cluster: an earlier bug filled the alphabetically-first N
+    # files, so every bug landed in one corner and the coverage test was void.
+    # Collect ALL eligible files (>=1 valid site), then pick N spread evenly
+    # across the sorted tree so bugs span the whole codebase (one per file).
+    files = sorted(f for f in tree.rglob("*.py") if not is_test(f))
+    eligible = [f for f in files if first_valid_site(f)]
+    if len(eligible) < a.n:
+        sys.exit(f"only {len(eligible)} eligible files, need {a.n}")
+    step = len(eligible) / a.n
+    chosen = [eligible[int(i * step)] for i in range(a.n)]
+
+    key = []
+    for f in chosen:
+        lines, i, search, replace, cat, desc = first_valid_site(f)
+        lines[i] = lines[i].replace(search, replace, 1)
+        f.write_text("".join(lines), encoding="utf-8")
+        rel = str(f.relative_to(tree))
+        key.append({"file": rel, "line": i + 1, "category": cat, "description": desc})
+        print(f"mutated {rel}")
+    # Spread guard: a coverage benchmark is void if bugs cluster in one corner.
+    # Require them to span many distinct directories (>=60% of bug count).
+    dirs = {str(Path(b["file"]).parent) for b in key}
+    need = max(2, int(a.n * 0.6))
+    if len(dirs) < need:
+        sys.exit(f"ARENA INVALID: {len(key)} bugs span only {len(dirs)} dirs "
+                 f"(need >={need}) - bugs are clustered, coverage test would be void")
     marker.write_text("mutated for benchmark - do not audit this file\n")
     Path(a.key).write_text(json.dumps({"bugs": key, "total": len(key)}, indent=2))
-    print(f"\n{len(key)} bugs across {len({b['file'] for b in key})} files -> {a.key}")
-    if len(key) < a.n:
-        print(f"WARNING: wanted {a.n}, planted {len(key)} - raise --max-per-file or --n down")
+    print(f"\n{len(key)} bugs across {len(dirs)} distinct dirs -> {a.key}")
 
 
 if __name__ == "__main__":

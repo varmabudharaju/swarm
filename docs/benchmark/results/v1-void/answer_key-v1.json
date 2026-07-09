@@ -1,0 +1,185 @@
+{
+  "bugs": [
+    {
+      "file": "__init__.py",
+      "line": 57,
+      "category": "inverted-equality",
+      "description": "equality flipped to inequality"
+    },
+    {
+      "file": "algorithms/approximation/clustering_coefficient.py",
+      "line": 66,
+      "category": "inequality-boundary",
+      "description": "off-by-one: < weakened to <="
+    },
+    {
+      "file": "algorithms/approximation/connectivity.py",
+      "line": 83,
+      "category": "inverted-equality",
+      "description": "equality flipped to inequality"
+    },
+    {
+      "file": "algorithms/approximation/density.py",
+      "line": 11,
+      "category": "inverted-equality",
+      "description": "equality flipped to inequality"
+    },
+    {
+      "file": "algorithms/approximation/distance_measures.py",
+      "line": 78,
+      "category": "inverted-equality",
+      "description": "equality flipped to inequality"
+    },
+    {
+      "file": "algorithms/approximation/dominating_set.py",
+      "line": 77,
+      "category": "inverted-equality",
+      "description": "equality flipped to inequality"
+    },
+    {
+      "file": "algorithms/approximation/kcomponents.py",
+      "line": 120,
+      "category": "inequality-boundary",
+      "description": "off-by-one: > weakened to >="
+    },
+    {
+      "file": "algorithms/approximation/maxcut.py",
+      "line": 136,
+      "category": "inequality-boundary",
+      "description": "off-by-one: > weakened to >="
+    },
+    {
+      "file": "algorithms/approximation/ramsey.py",
+      "line": 44,
+      "category": "inverted-equality",
+      "description": "inequality flipped to equality"
+    },
+    {
+      "file": "algorithms/approximation/steinertree.py",
+      "line": 49,
+      "category": "inverted-equality",
+      "description": "inequality flipped to equality"
+    },
+    {
+      "file": "algorithms/approximation/traveling_salesman.py",
+      "line": 441,
+      "category": "inequality-boundary",
+      "description": "off-by-one: < weakened to <="
+    },
+    {
+      "file": "algorithms/approximation/treewidth.py",
+      "line": 147,
+      "category": "inverted-equality",
+      "description": "equality flipped to inequality"
+    },
+    {
+      "file": "algorithms/approximation/vertex_cover.py",
+      "line": 75,
+      "category": "inverted-boolean",
+      "description": "or->and"
+    },
+    {
+      "file": "algorithms/assortativity/connectivity.py",
+      "line": 93,
+      "category": "inverted-equality",
+      "description": "equality flipped to inequality"
+    },
+    {
+      "file": "algorithms/assortativity/correlation.py",
+      "line": 278,
+      "category": "inverted-equality",
+      "description": "inequality flipped to equality"
+    },
+    {
+      "file": "algorithms/assortativity/neighbor_degree.py",
+      "line": 98,
+      "category": "inverted-equality",
+      "description": "equality flipped to inequality"
+    },
+    {
+      "file": "algorithms/asteroidal.py",
+      "line": 63,
+      "category": "inequality-boundary",
+      "description": "off-by-one: < weakened to <="
+    },
+    {
+      "file": "algorithms/bipartite/basic.py",
+      "line": 141,
+      "category": "inequality-boundary",
+      "description": "off-by-one: < weakened to <="
+    },
+    {
+      "file": "algorithms/bipartite/centrality.py",
+      "line": 273,
+      "category": "inverted-boolean",
+      "description": "and->or"
+    },
+    {
+      "file": "algorithms/bipartite/cluster.py",
+      "line": 253,
+      "category": "inverted-boolean",
+      "description": "or->and"
+    },
+    {
+      "file": "algorithms/bipartite/covering.py",
+      "line": 53,
+      "category": "inverted-equality",
+      "description": "equality flipped to inequality"
+    },
+    {
+      "file": "algorithms/bipartite/edgelist.py",
+      "line": 135,
+      "category": "inverted-boolean",
+      "description": "or->and"
+    },
+    {
+      "file": "algorithms/bipartite/extendability.py",
+      "line": 86,
+      "category": "inverted-boolean",
+      "description": "or->and"
+    },
+    {
+      "file": "algorithms/bipartite/generators.py",
+      "line": 59,
+      "category": "inverted-boolean",
+      "description": "and->or"
+    },
+    {
+      "file": "algorithms/bipartite/link_analysis.py",
+      "line": 228,
+      "category": "inverted-boolean",
+      "description": "or->and"
+    },
+    {
+      "file": "algorithms/bipartite/matching.py",
+      "line": 381,
+      "category": "inverted-boolean",
+      "description": "or->and"
+    },
+    {
+      "file": "algorithms/bipartite/matrix.py",
+      "line": 82,
+      "category": "inverted-equality",
+      "description": "equality flipped to inequality"
+    },
+    {
+      "file": "algorithms/bipartite/projection.py",
+      "line": 203,
+      "category": "inequality-boundary",
+      "description": "off-by-one: < weakened to <="
+    },
+    {
+      "file": "algorithms/bipartite/redundancy.py",
+      "line": 88,
+      "category": "inequality-boundary",
+      "description": "off-by-one: < weakened to <="
+    },
+    {
+      "file": "algorithms/boundary.py",
+      "line": 106,
+      "category": "inverted-boolean",
+      "description": "or->and"
+    }
+  ],
+  "total": 30
+}
